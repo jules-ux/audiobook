@@ -245,9 +245,10 @@ elif st.session_state['fase'] == 'theater':
         .dropdown-item { padding: 10px 15px; font-size: 0.85rem; color: #e5e7eb; cursor: pointer; }
         .dropdown-item:hover { background: #374151; color: white; }
 
+        /* VASTE HOOGTE VOOR DE LAYOUT ZONE */
         .main-layout {
             position: absolute; top: 70px; bottom: 115px; left: 0; right: 0;
-            display: flex; position: relative;
+            display: flex; overflow: hidden;
         }
 
         /* OVERLAY ZIJBALK SYSTEM */
@@ -292,8 +293,16 @@ elif st.session_state['fase'] == 'theater':
         .status-badge { font-size: 0.95rem; color: #4b5563; }
         .status-badge.completed { color: #10b981; }
 
-        /* PROMPTER SCROLL FLOW */
-        .story-scroll-zone { flex: 1; overflow-y: auto !important; padding: 40vh 8% 40vh 8%; background: #0b0f19; scroll-behavior: smooth; }
+        /* PROMPTER SCROLL FLOW (Gecorrigeerd voor absolute hoogtebehoud) */
+        .story-scroll-zone { 
+            position: relative;
+            width: 100%;
+            height: 100%;
+            overflow-y: scroll !important; 
+            padding: 35vh 8% 45vh 8%; 
+            background: #0b0f19; 
+            scroll-behavior: smooth; 
+        }
         .story-scroll-zone::-webkit-scrollbar { display: none; }
 
         .story-block { width: 100%; text-align: center; padding: 25px 30px; margin: 15px 0; border-radius: 16px; border: 1px solid transparent; cursor: pointer; opacity: 0.25; transition: all 0.4s ease; }
@@ -346,8 +355,6 @@ elif st.session_state['fase'] == 'theater':
         const storageKeyTime = `last_time_${videoId}`;
         
         let completedChapters = JSON.parse(localStorage.getItem(storageKeyChapters)) || [];
-
-        // Filter alle legitieme hoofdstukken (startend met Chapitre)
         const chaptersList = storyData.filter(line => line.is_chapter);
 
         // Bouw prompter
@@ -399,6 +406,7 @@ elif st.session_state['fase'] == 'theater':
 
         renderSidebarChapters();
 
+        // EXACTE CENTERING SCROLL MECHANISME HERSTELD
         function syncActiveBlock(activeId) {
             if (currentActiveId === activeId) return;
             currentActiveId = activeId;
@@ -422,7 +430,6 @@ elif st.session_state['fase'] == 'theater':
                     
                     if (currentLine.start >= chap.start) {
                         activeChap = chap;
-                        // Afvinken zodra we voorbij het startpunt van de volgende schieten
                         if (nextChap && currentLine.start >= nextChap.start) {
                             if (!completedChapters.includes(chap.id)) {
                                 completedChapters.push(chap.id);
@@ -440,10 +447,12 @@ elif st.session_state['fase'] == 'theater':
                 }
             }
 
+            // Gecorrigeerde scroll-to-center berekening
             const currentBlock = document.getElementById(`block-${activeId}`);
             if (currentBlock) {
+                const targetScrollTop = currentBlock.offsetTop - (container.offsetHeight / 2) + (currentBlock.offsetHeight / 2);
                 container.scrollTo({
-                    top: currentBlock.offsetTop - (container.clientHeight / 2) + (currentBlock.clientHeight / 2),
+                    top: targetScrollTop,
                     behavior: 'smooth'
                 });
             }
@@ -504,7 +513,6 @@ elif st.session_state['fase'] == 'theater':
             });
         }
 
-        // BIJ HET LADEN: Gelijk herstarten vanaf opgeslagen minuut/seconde!
         function onPlayerReady() {
             const savedTime = localStorage.getItem(storageKeyTime);
             if (savedTime) {
@@ -538,7 +546,6 @@ elif st.session_state['fase'] == 'theater':
             return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
         }
 
-        // SECUUR OPSLAAN EN SYNCHRONISEREN EN SLIDER BINDING
         function checkLiveSync() {
             if (!player || typeof player.getCurrentTime !== 'function' || isDraggingSlider) return;
             
@@ -548,7 +555,6 @@ elif st.session_state['fase'] == 'theater':
             document.getElementById('time-elapsed').innerText = formatTime(currentTime);
             document.getElementById('time-total').innerText = formatTime(duration);
             
-            // LASTE EXACTE MINUUT/SECONDE LOKAAL OPSLAAN
             if (currentTime > 0) {
                 localStorage.setItem(storageKeyTime, currentTime);
             }
@@ -580,7 +586,7 @@ elif st.session_state['fase'] == 'theater':
         function jumpToTime(seconds) {
             if (player && typeof player.seekTo === 'function') { 
                 player.seekTo(seconds, true);
-                localStorage.setItem(storageKeyTime, seconds); // Direct opslaan bij handmatige jump
+                localStorage.setItem(storageKeyTime, seconds);
                 const activeLine = storyData.find(line => seconds >= line.start && seconds <= line.end);
                 if (activeLine) syncActiveBlock(activeLine.id);
             }
