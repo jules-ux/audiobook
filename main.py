@@ -13,7 +13,6 @@ st.set_page_config(
 )
 
 # --- DEFINIEER DE BOEKENBIBLIOTHEEK ---
-# TIP: Pas de "tijd_offset" aan als de tekst te vroeg of te laat komt!
 BOEKEN_DATABASE = [
     {
         "id": "boek_1",
@@ -22,7 +21,7 @@ BOEKEN_DATABASE = [
         "youtube_url": "https://www.youtube.com/watch?v=B4s9iJBUqSE",
         "srt_bestand": "transscriptie_film.srt",
         "cover_emoji": "🚀",
-        "tijd_offset": 0.0  # Loopt al perfect
+        "tijd_offset": 0.0  
     },
     {
         "id": "boek_2",
@@ -31,7 +30,7 @@ BOEKEN_DATABASE = [
         "youtube_url": "https://www.youtube.com/watch?v=dIKudSy7d-U",
         "srt_bestand": "youtube_video_transcript.srt",
         "cover_emoji": "🔍",
-        "tijd_offset": -1.5  # Schuift de SRT-tijd 1.8 seconden naar voren
+        "tijd_offset": -1.8  
     },
 ]
 
@@ -69,7 +68,6 @@ def parse_srt_raw(srt_tekst, offset=0.0):
                 
                 is_chapter = tekst.lower().strip().startswith("chapitre") or tekst.lower().strip().startswith("chapter")
                 
-                # Bereken de gecorrigeerde tijden met de offset, maar zorg dat het niet onder de 0 zakt
                 start_tijd = max(0.0, srt_tijd_naar_seconden(tijd_delen[0]) + offset)
                 end_tijd = max(0.0, srt_tijd_naar_seconden(tijd_delen[1]) + offset)
                 
@@ -83,43 +81,171 @@ def parse_srt_raw(srt_tekst, offset=0.0):
                 idx += 1
     return data
 
-# --- FASE 1: SETUP (DASHBOARD / BIBLIOTHEEK) ---
+# --- FASE 1: SETUP (DASHBOARD - READIUM STIJL) ---
 if st.session_state['fase'] == 'setup':
     st.markdown("""
         <style>
-            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+            @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;800&family=Inter:wght@400;600;700&display=swap');
+            
+            /* Algemene achtergrond */
             html, body, [data-testid="stAppViewContainer"] {
-                background-color: #0b0f19 !important;
+                background-color: #F4F0E6 !important; 
+                font-family: 'Nunito', sans-serif;
+                color: #2B2D42;
+            }
+            
+            /* Header Styling */
+            .header-container {
+                text-align: center;
+                padding: 40px 20px 30px 20px;
+            }
+            .main-title { 
+                color: #2B2D42; 
+                font-weight: 800; 
+                font-size: 3.2rem; 
+                margin-bottom: 8px; 
+                line-height: 1.2;
+            }
+            .sub-title { 
+                color: #6C757D; 
+                font-size: 1.1rem; 
                 font-family: 'Inter', sans-serif;
             }
-            .main-title { text-align: center; color: #ffffff; font-weight: 700; font-size: 2.5rem; margin-bottom: 5px; }
-            .sub-title { text-align: center; color: #9ca3af; font-size: 1.1rem; margin-bottom: 40px; }
-            .progress-indicator { font-size: 0.8rem; color: #60a5fa; font-weight: bold; margin-top: 5px; }
+            
+            /* Kaart Styling */
+            .book-card {
+                background: #FFFFFF; 
+                border-radius: 24px; 
+                padding: 30px; 
+                margin-bottom: 15px; 
+                display: flex; 
+                gap: 20px; 
+                align-items: center; 
+                box-shadow: 0 10px 30px rgba(0,0,0,0.03); 
+                position: relative; 
+                overflow: hidden;
+            }
+            .book-card-deco {
+                position: absolute; 
+                top: -20px; right: -20px; 
+                width: 80px; height: 80px; 
+                background-color: #F4A261; 
+                border-radius: 50%; 
+                opacity: 0.8;
+            }
+            .book-cover {
+                font-size: 4rem; 
+                background: #F4F0E6; 
+                min-width: 100px; 
+                height: 130px; 
+                display: flex; 
+                align-items: center; 
+                justify-content: center; 
+                border-radius: 16px; 
+                box-shadow: 0 4px 10px rgba(0,0,0,0.05); 
+                z-index: 1;
+            }
+            .book-info {
+                flex: 1; 
+                z-index: 1;
+            }
+            .book-title {
+                margin: 0; 
+                color: #2B2D42; 
+                font-size: 1.5rem; 
+                font-weight: 800;
+            }
+            .book-author {
+                margin: 4px 0 15px 0; 
+                color: #6C757D; 
+                font-size: 0.95rem; 
+                font-family: "Inter", sans-serif;
+            }
+            .book-badge {
+                background: #F4F0E6; 
+                color: #2B2D42; 
+                padding: 6px 12px; 
+                border-radius: 20px; 
+                font-size: 0.75rem; 
+                font-weight: 700; 
+                font-family: "Inter", sans-serif; 
+                display: inline-block; 
+                margin-bottom: 8px;
+            }
+            .progress-indicator { 
+                font-size: 0.85rem; 
+                color: #F4A261; 
+                font-weight: 700; 
+                margin-top: 8px; 
+                font-family: 'Inter', sans-serif;
+            }
+            
+            /* Streamlit Knoppen overschrijven naar Navy Blue */
+            div.stButton > button {
+                background-color: #2B2D42 !important;
+                color: #FFFFFF !important;
+                border-radius: 30px !important;
+                border: none !important;
+                padding: 10px 24px !important;
+                font-weight: 700 !important;
+                width: 100% !important;
+                box-shadow: 0 4px 10px rgba(43, 45, 66, 0.2) !important;
+                transition: all 0.3s ease !important;
+            }
+            div.stButton > button:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 6px 15px rgba(43, 45, 66, 0.3) !important;
+            }
+
+            /* --- Mobiele Responsiviteit --- */
+            @media (max-width: 768px) {
+                .main-title { 
+                    font-size: 2.2rem; 
+                }
+                .book-card {
+                    flex-direction: column;
+                    text-align: center;
+                    padding: 25px 20px;
+                }
+                .book-cover {
+                    min-width: 100%;
+                    height: 120px;
+                }
+                .header-container {
+                    padding: 30px 10px 20px 10px;
+                }
+            }
         </style>
     """, unsafe_allow_html=True)
     
-    st.markdown("<h1 class='main-title'>📚 Mijn Audioboek Bioscoop</h1>", unsafe_allow_html=True)
-    st.markdown("<p class='sub-title'>Kies een boek uit je lokale bibliotheek om verder te lezen</p>", unsafe_allow_html=True)
+    # Geïntegreerde Header
+    st.markdown("""
+        <div class='header-container'>
+            <h1 class='main-title'>Readium Sync</h1>
+            <p class='sub-title'>Start reading your favorite books today!</p>
+        </div>
+    """, unsafe_allow_html=True)
     
+    # Streamlit kolommen (stapelen automatisch op mobiel)
     cols = st.columns(2)
     
     for i, boek in enumerate(BOEKEN_DATABASE):
         with cols[i % 2]:
-            st.markdown(f"""
-            <div style='background: #111827; border: 1px solid #1f2937; border-radius: 16px; padding: 25px; margin-bottom: 20px; display: flex; gap: 20px; align-items: center;'>
-                <div style='font-size: 3.5rem; background: #1f2937; width: 80px; height: 110px; display: flex; align-items: center; justify-content: center; border-radius: 8px;'>{boek['cover_emoji']}</div>
-                <div style='flex: 1;'>
-                    <h3 style='margin: 0; color: #ffffff; font-size: 1.3rem; font-weight:700;'>{boek['titel']}</h3>
-                    <p style='margin: 3px 0 10px 0; color: #9ca3af; font-size: 0.9rem;'>{boek['auteur']}</p>
-                    <span style='background: rgba(59, 130, 246, 0.1); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.2); padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600;'>
-                        📄 {boek['srt_bestand']}
-                    </span>
-                    <div id="dashboard-progress-{get_youtube_id(boek['youtube_url'])}" class="progress-indicator">⏱️ Voortgang laden...</div>
+            card_html = f"""
+            <div class="book-card">
+                <div class="book-card-deco"></div>
+                <div class="book-cover">{boek['cover_emoji']}</div>
+                <div class="book-info">
+                    <h3 class="book-title">{boek['titel']}</h3>
+                    <p class="book-author">By {boek['auteur']}</p>
+                    <span class="book-badge">📄 {boek['srt_bestand']}</span>
+                    <div id="dashboard-progress-{get_youtube_id(boek['youtube_url'])}" class="progress-indicator">⏱️ Loading...</div>
                 </div>
             </div>
-            """, unsafe_allow_html=True)
+            """
+            st.markdown(card_html, unsafe_allow_html=True)
             
-            if st.button(f"📖 Open {boek['titel']}", key=f"btn_{boek['id']}", use_container_width=True):
+            if st.button(f"Continue reading", key=f"btn_{boek['id']}"):
                 video_id = get_youtube_id(boek['youtube_url'])
                 if video_id:
                     if os.path.exists(boek['srt_bestand']):
@@ -134,19 +260,20 @@ if st.session_state['fase'] == 'setup':
                     else:
                         st.error(f"Fout: Kan `{boek['srt_bestand']}` niet vinden.")
 
+    # Script om de voortgang op te halen uit localStorage
     html_progress_reader = """
     <script>
         setTimeout(() => {
             const divs = window.parent.document.querySelectorAll('[id^="dashboard-progress-"]');
-            divs.forEach(div => {
+            div.forEach(div => {
                 const vId = div.id.replace('dashboard-progress-', '');
                 const savedTime = window.parent.localStorage.getItem(`last_time_${vId}`);
                 if(savedTime) {
                     const mins = Math.floor(parseFloat(savedTime) / 60);
                     const secs = Math.floor(parseFloat(savedTime) % 60);
-                    div.innerHTML = `⏱️ Gebleven op: ${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                    div.innerHTML = `⏱️ Resuming from: ${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
                 } else {
-                    div.innerHTML = `⏱️ Nog niet gestart`;
+                    div.innerHTML = `⏱️ Start reading`;
                 }
             });
         }, 300);
@@ -156,12 +283,12 @@ if st.session_state['fase'] == 'setup':
 
 # --- FASE 2: LOADING SCREEN ---
 elif st.session_state['fase'] == 'loading':
-    st.markdown("<div style='text-align: center; margin-top: 30vh;'><h3 style='color: #ffffff;'>⏳ Theatermodus laden en voortgang ophalen...</h3></div>", unsafe_allow_html=True)
+    st.markdown("<div style='text-align: center; margin-top: 30vh;'><h3 style='color: #2B2D42; font-family: Nunito;'>⏳ Preparing your book...</h3></div>", unsafe_allow_html=True)
     time.sleep(0.4)
     st.session_state['fase'] = 'theater'
     st.rerun()
 
-# --- FASE 3: THEATER EN AUTOMATISCHE PROMPTER ---
+# --- FASE 3: THEATER EN AUTOMATISCHE PROMPTER (LIRE EN SYNC STIJL) ---
 elif st.session_state['fase'] == 'theater':
     st.markdown("""
         <style>
@@ -171,7 +298,7 @@ elif st.session_state['fase'] == 'theater':
                 max-height: 100vh !important;
                 margin: 0 !important;
                 padding: 0 !important;
-                background-color: #0b0f19 !important;
+                background-color: #F8F9FA !important; /* Lichte achtergrond */
             }
             header, footer, [data-testid="stHeader"] { display: none !important; visibility: hidden !important; }
             section[data-testid="stSidebar"], [data-testid="collapsedControl"] { display: none !important; }
@@ -190,91 +317,66 @@ elif st.session_state['fase'] == 'theater':
         </div>
 
         <div class="top-bar">
-            <div class="back-arrow" onclick="gaTerugNaarDashboard();">&#x2190; <span class="video-title">{boek_titel}</span></div>
-            
-            <div class="middle-controls">
-                <button class="menu-trigger-btn" onclick="toggleChaptersOverlay(event)">🔖 Hoofdstukken</button>
-
-                <div class="language-selector">
-                    <span class="lang-pill active-lang">AUTO-DETECT</span>
-                    <span class="arrow-separator">&#x2192;</span>
-                    <span id="display-target-lang" class="lang-pill target-lang">NEDERLANDS</span>
+            <div class="top-header">
+                <div class="back-area">
+                    <div class="back-arrow" onclick="gaTerugNaarDashboard();">&#x2190;</div>
+                    <div class="current-chapter-label" id="current-chapter-label">Huidig hoofdstuk</div>
                 </div>
+                <button id="open-settings-btn" class="btn-secondary" onclick="openSettings()">Instellingen</button>
             </div>
 
-            <div class="settings-wrapper">
-                <div class="settings-icon" onclick="toggleSettingsMenu(event)">&#x2699;</div>
-                <div id="settings-menu" class="dropdown-menu">
-                    <div class="dropdown-title">Vertaal Doeltaal</div>
-                    <div class="dropdown-item" onclick="changeLanguage('nl', 'NEDERLANDS')">Nederlands</div>
-                    <div class="dropdown-item" onclick="changeLanguage('en', 'ENGLISH')">English</div>
-                    <div class="dropdown-item" onclick="changeLanguage('de', 'DEUTSCH')">Deutsch</div>
-                    <div class="dropdown-item" onclick="changeLanguage('es', 'ESPAÑOL')">Español</div>
+            <div class="progress-summary">
+                <div class="progress-label">Voortgang</div>
+                <div class="progress-bar-wrapper">
+                    <input type="range" id="timeline-slider" min="0" max="100" value="0" step="0.1" oninput="onSliderDrag(this.value)" onchange="onSliderRelease(this.value)">
                 </div>
             </div>
         </div>
-        
+
+        <div id="settings-overlay" class="settings-overlay">
+            <div class="overlay-panel">
+                <div class="overlay-header">
+                    <div class="back-arrow" onclick="closeSettings();">&#x2190;</div>
+                    <div class="overlay-title">Instellingen</div>
+                </div>
+                <div class="overlay-info">
+                    <div class="overlay-current-chapter" id="overlay-current-chapter">Huidig hoofdstuk</div>
+                    <div class="overlay-progress-text" id="overlay-progress-text">0%</div>
+                </div>
+                <div class="overlay-controls">
+                    <div class="overlay-buttons-group">
+                        <button id="play-trigger-btn" class="btn-play" onclick="togglePlayback()">Play</button>
+                        <button class="btn-secondary" onclick="skipTime(-10)">-10s</button>
+                        <button class="btn-secondary" onclick="skipTime(10)">+10s</button>
+                        <button class="btn-secondary" onclick="changeSpeed(0.75)">0.75x</button>
+                        <button id="speed-indicator" class="btn-active" onclick="changeSpeed(1.0)">1x</button>
+                        <button class="btn-secondary" onclick="changeSpeed(1.25)">1.25x</button>
+                        <button class="btn-secondary" onclick="changeSpeed(1.5)">1.5x</button>
+                        <button class="btn-secondary" style="background: #EDE9FE; color: #5B21B6; border: 1px solid #DDD6FE;" onclick="toggleChapters()">Hoofdstukken 📖</button>
+                    </div>
+                    <div id="overlay-chapters" class="overlay-chapters-menu">
+                        <div class="chapters-menu-header">📚 Alle Hoofdstukken</div>
+                        <div id="chapters-list" class="chapters-menu-list"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="main-layout">
-            <div id="chapters-overlay" class="chapters-overlay" onclick="closeChaptersOverlay()">
-                <div class="sidebar-content" onclick="event.stopPropagation()">
-                    <div class="sidebar-header">
-                        <span class="sidebar-title">🔖 Hoofdstukken</span>
-                        <button class="close-sidebar-btn" onclick="closeChaptersOverlay()">✕ Sluiten</button>
-                    </div>
-                    <div id="chapters-list-container" class="chapters-list"></div>
-                </div>
-            </div>
-
             <div id="story-container" class="story-scroll-zone"></div>
-        </div>
-
-        <div class="hover-control-bar">
-            <div class="progress-bar-container">
-                <input type="range" id="timeline-slider" min="0" max="100" value="0" step="0.1" oninput="onSliderDrag(this.value)" onchange="onSliderRelease(this.value)">
-            </div>
-
-            <div class="controls-row">
-                <div class="time-info">
-                    <div class="time-block">
-                        <span class="time-label">ELAPSED</span>
-                        <span id="time-elapsed" class="time-value">00:00</span>
-                    </div>
-                    <div class="time-block">
-                        <span class="time-label">TOTAL LENGTH</span>
-                        <span id="time-total" class="time-value">00:00</span>
-                    </div>
-                </div>
-
-                <div class="core-controls">
-                    <button class="skip-btn" onclick="skipTime(-10)">&#x21ba;</button>
-                    <button id="play-trigger-btn" class="main-play-btn" onclick="togglePlayback()">&#x25b6;</button>
-                    <button class="skip-btn" onclick="skipTime(10)">&#x21bb;</button>
-                </div>
-
-                <div class="extra-controls">
-                    <div class="speed-wrapper">
-                        <div id="speed-trigger" class="speed-pill" onclick="toggleSpeedMenu(event)">📝 1.0x</div>
-                        <div id="speed-menu" class="dropdown-menu speed-dropdown">
-                            <div class="dropdown-item" onclick="changeSpeed(0.5)">0.5x Snelheid</div>
-                            <div class="dropdown-item" onclick="changeSpeed(1.0)">1.0x Normaal</div>
-                            <div class="dropdown-item" onclick="changeSpeed(1.5)">1.5x Snel</div>
-                            <div class="dropdown-item" onclick="changeSpeed(2.0)">2.0x Turbo</div>
-                        </div>
-                    </div>
-                    <div class="mic-btn">🎙️</div>
-                </div>
-            </div>
         </div>
     </div>
 
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        
         * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-        html, body {{ background-color: #0b0f19; overflow: hidden !important; height: 100vh !important; width: 100vw !important; }}
+        html, body {{ background-color: #F8F9FA; overflow: hidden !important; height: 100vh !important; width: 100vw !important; }}
 
         .app-container {{
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            color: #f3f4f6;
-            background-color: #0b0f19;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            color: #111827;
+            background-color: #F8F9FA;
             height: 100vh !important;
             width: 100vw !important;
             position: relative;
@@ -283,125 +385,249 @@ elif st.session_state['fase'] == 'theater':
             flex-direction: column;
         }}
 
+        /* TOP BAR STYLING */
         .top-bar {{
-            position: absolute; top: 0; left: 0; right: 0; height: 70px;
+            background: #FFFFFF; 
+            border-bottom: 1px solid #E5E7EB; 
+            padding: 15px 30px 0 30px;
+            z-index: 9999;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+        }}
+        
+        .top-header {{
             display: flex; justify-content: space-between; align-items: center;
-            padding: 0 20px; background: #111827; border-bottom: 1px solid #1f2937; z-index: 9999;
+            margin-bottom: 15px;
         }}
-        .back-arrow {{ font-weight: 600; cursor: pointer; color: #3b82f6; }}
-        .middle-controls {{ display: flex; align-items: center; gap: 15px; }}
-        
-        .menu-trigger-btn {{
-            background: #1f2937; border: 1px solid #374151; color: #ffffff;
-            padding: 8px 16px; border-radius: 20px; font-weight: 600; font-size: 0.85rem;
-            cursor: pointer; transition: background 0.2s;
-        }}
-        .menu-trigger-btn:hover {{ background: #374151; }}
+        .back-arrow {{ font-weight: 800; font-size: 1.5rem; cursor: pointer; color: #111827; display: flex; align-items: center; gap: 10px; }}
+        .video-title {{ font-size: 1.8rem; font-weight: 800; letter-spacing: -0.5px; }}
+        .lang-info {{ color: #4B5563; font-weight: 500; font-size: 0.95rem; }}
 
-        .language-selector {{ display: flex; align-items: center; gap: 6px; }}
-        .lang-pill {{ padding: 5px 10px; border-radius: 15px; font-size: 0.68rem; font-weight: 800; }}
-        .active-lang {{ background: #064e3b; color: #34d399; }}
-        .target-lang {{ background: #1e3a8a; color: #60a5fa; }}
-        .settings-icon {{ font-size: 1.3rem; cursor: pointer; color: #9ca3af; }}
-        
-        .settings-wrapper, .speed-wrapper {{ position: relative; display: inline-block; }}
-        .dropdown-menu {{
-            display: none; position: absolute; right: 0; background: #1f2937;
-            border: 1px solid #374151; border-radius: 10px; box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-            width: 180px; z-index: 10000; margin-top: 10px;
+        .control-row {{
+            display: none;
         }}
-        .speed-dropdown {{ bottom: 100%; margin-bottom: 15px; top: auto; }}
-        .dropdown-title {{ padding: 10px 15px; font-size: 0.75rem; color: #9ca3af; font-weight: bold; border-bottom: 1px solid #374151; }}
-        .dropdown-item {{ padding: 10px 15px; font-size: 0.85rem; color: #e5e7eb; cursor: pointer; }}
-        .dropdown-item:hover {{ background: #374151; color: white; }}
+        
+        .top-header {{
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 15px;
+        }}
+        .back-area {{
+            display: flex; align-items: center; gap: 14px;
+        }}
+        .current-chapter-label, .overlay-current-chapter {{
+            font-size: 1rem; color: #111827; font-weight: 700;
+            max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }}
+        .progress-summary {{
+            display: flex; flex-direction: column; gap: 8px;
+            margin-bottom: 8px;
+        }}
+        .progress-label {{ color: #6B7280; font-size: 0.85rem; font-weight: 600; }}
+        .progress-bar-wrapper {{ width: 100%; }}
+        .overlay-info {{ padding: 16px 20px; border-bottom: 1px solid #E5E7EB; }}
+        .overlay-progress-text {{ color: #6B7280; font-size: 0.9rem; margin-top: 8px; }}
+        .overlay-controls {{ padding: 16px 20px 24px; }}
+        .overlay-buttons-group {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }}
+        .settings-overlay {{
+            position: fixed; inset: 0;
+            display: none; align-items: center; justify-content: center;
+            background: rgba(15, 23, 42, 0.45);
+            z-index: 10001;
+            padding: 16px;
+        }}
+        .settings-overlay.open {{ display: flex; }}
+        .overlay-panel {{
+            width: 100%; max-width: 650px;
+            background: #FFFFFF;
+            border-radius: 24px;
+            box-shadow: 0 24px 80px rgba(15, 23, 42, 0.22);
+            overflow: hidden;
+            animation: appear 0.18s ease-out;
+        }}
+        @keyframes appear {{
+            from {{ opacity: 0; transform: translateY(12px); }}
+            to {{ opacity: 1; transform: translateY(0); }}
+        }}
+        .overlay-header {{ display: flex; align-items: center; justify-content: space-between; padding: 20px; gap: 12px; }}
+        .overlay-title {{ font-size: 1rem; font-weight: 800; color: #111827; }}
+        .overlay-current-chapter {{ font-size: 1rem; font-weight: 700; color: #111827; }}
+        .overlay-progress-text {{ font-size: 0.95rem; color: #4B5563; }}
+        .overlay-buttons-group button {{ width: 100%; }}
+        
+        .buttons-group {{ display: flex; gap: 8px; align-items: center; position: relative; }}
+        
+        .btn-play {{
+            background: #A855F7; color: white; border: none; border-radius: 20px;
+            padding: 8px 24px; font-weight: 600; font-size: 0.9rem; cursor: pointer;
+            box-shadow: 0 2px 5px rgba(168, 85, 247, 0.3); transition: all 0.2s;
+        }}
+        .btn-play:hover {{ background: #9333EA; }}
+        
+        .btn-secondary, .btn-active {{
+            background: #F3E8FF; color: #6B21A8; border: 1px solid #E9D5FF;
+            border-radius: 20px; padding: 6px 14px; font-weight: 600; font-size: 0.85rem;
+            cursor: pointer; transition: all 0.2s;
+        }}
+        .btn-secondary:hover {{ background: #E9D5FF; }}
+        .btn-active {{ background: #A855F7; color: white; border: none; }}
+
+        .sentence-counter {{ color: #4B5563; font-weight: 500; font-size: 0.9rem; }}
+
+        .progress-bar-container {{ width: 100%; display: flex; align-items: center; padding-bottom: 10px; }}
+        #timeline-slider {{ width: 100%; -webkit-appearance: none; background: #E5E7EB; height: 8px; border-radius: 999px; outline: none; cursor: pointer; }}
+        #timeline-slider::-webkit-slider-thumb {{ -webkit-appearance: none; appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #A855F7; }}
+
+        /* STYLING VOOR HOOFDSTUKKEN DROPDOWN */
+        .overlay-chapters-menu {{
+            position: relative;
+            width: 100%;
+            max-height: 300px;
+            background: #FFFFFF;
+            border: 1px solid #E5E7EB;
+            border-radius: 20px;
+            display: none;
+            flex-direction: column;
+            overflow: hidden;
+            margin-top: 16px;
+            animation: fadeIn 0.18s ease-out;
+        }}
+        .overlay-chapters-menu.open {{ display: flex; }}
+        @keyframes fadeIn {{
+            from {{ opacity: 0; transform: translateY(-10px); }}
+            to {{ opacity: 1; transform: translateY(0); }}
+        }}
+        .chapters-menu-header {{
+            padding: 14px 20px;
+            font-weight: 800;
+            background: #F9FAFB;
+            border-bottom: 1px solid #E5E7EB;
+            font-size: 1rem;
+            color: #111827;
+        }}
+        .chapters-menu-list {{
+            overflow-y: auto;
+            flex: 1;
+        }}
+        .chapter-item {{
+            padding: 12px 20px;
+            font-size: 0.95rem;
+            color: #374151;
+            cursor: pointer;
+            border-bottom: 1px solid #F3F4F6;
+            font-weight: 600;
+            transition: all 0.2s;
+        }}
+        .chapter-item:hover {{
+            background: #F3E8FF;
+            color: #6B21A8;
+            padding-left: 25px;
+        }}
 
         .main-layout {{
-            position: absolute; top: 70px; bottom: 115px; left: 0; right: 0;
+            flex: 1;
             display: flex; overflow: hidden;
+            background: #F8F9FA;
         }}
 
-        .chapters-overlay {{
-            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-            background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(4px);
-            z-index: 99999; display: none; opacity: 0; transition: opacity 0.3s ease;
-        }}
-        .chapters-overlay.open {{ display: block; opacity: 1; }}
-        
-        .sidebar-content {{
-            position: absolute; top: 0; left: -340px; width: 340px; height: 100%;
-            background: #111827; box-shadow: 10px 0 30px rgba(0,0,0,0.5);
-            display: flex; flex-direction: column; padding: 20px 0;
-            transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }}
-        .chapters-overlay.open .sidebar-content {{ left: 0; }}
-
-        .sidebar-header {{
-            display: flex; justify-content: space-between; align-items: center;
-            padding: 0 20px 15px 20px; border-bottom: 1px solid #1f2937;
-        }}
-        .sidebar-title {{ font-size: 1.1rem; font-weight: 700; color: #ffffff; }}
-        .close-sidebar-btn {{
-            background: #ef4444; border: none; color: white; padding: 6px 12px;
-            border-radius: 8px; font-size: 0.8rem; font-weight: bold; cursor: pointer;
-        }}
-
-        .chapters-list {{ flex: 1; overflow-y: auto; padding: 15px; }}
-        .chapter-sidebar-item {{
-            display: flex; align-items: center; justify-content: space-between;
-            padding: 14px; margin-bottom: 8px; border-radius: 10px;
-            background: #1f2937; border: 1px solid transparent; cursor: pointer;
-        }}
-        .chapter-sidebar-item.current-active-chapter {{ border-color: #3b82f6; background: rgba(59, 130, 246, 0.15); }}
-        .chapter-title-text {{ font-size: 0.85rem; font-weight: 500; color: #d1d5db; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
-        .chapter-sidebar-item.current-active-chapter .chapter-title-text {{ color: #60a5fa; font-weight: 700; }}
-        .status-badge {{ font-size: 0.95rem; color: #4b5563; }}
-        .status-badge.completed {{ color: #10b981; }}
-
+        /* PROMPTER CARDS STYLING (LIRE EN SYNC) */
         .story-scroll-zone {{ 
             position: relative; width: 100%; height: 100%;
-            overflow-y: scroll !important; padding: 35vh 8% 45vh 8%; 
-            background: #0b0f19;
+            overflow-y: scroll !important; padding: 25vh 10% 45vh 10%; 
+            scroll-snap-type: y mandatory;
         }}
         .story-scroll-zone::-webkit-scrollbar {{ display: none; }}
 
-        .story-block {{ width: 100%; text-align: center; padding: 25px 30px; margin: 15px 0; border-radius: 16px; border: 1px solid transparent; cursor: pointer; opacity: 0.25; transition: all 0.3s ease-in-out; }}
-        .story-block:hover {{ opacity: 0.6; background: rgba(31, 41, 55, 0.3); border-color: #374151; }}
-        .chapter-marker-block {{ border-left: 4px solid #3b82f6 !important; font-style: italic; }}
+        .story-block {{ 
+            width: 100%; padding: 32px; margin: 18px 0; 
+            border-radius: 24px; border: 1px solid transparent; 
+            cursor: pointer; opacity: 0.4; transition: all 0.4s ease-in-out; 
+            background: #F3F4F6; /* Lichte grijze kaart inactief */
+            scroll-snap-align: center;
+        }}
+        .story-block:hover {{ opacity: 0.8; background: #FFFFFF; border-color: #E5E7EB; }}
 
-        .active-block {{ opacity: 1 !important; background: #1f2937; border-color: #374151; box-shadow: 0 20px 40px rgba(0,0,0,0.5); transform: scale(1.01); }}
-        .active-block::before {{ content: "• HUIDIGE ZIN"; display: block; font-size: 0.65rem; font-weight: 800; color: #34d399; margin-bottom: 12px; }}
+        .active-block {{ 
+            opacity: 1 !important; 
+            background: #FFFFFF; 
+            border: 1px solid #F3E8FF; 
+            box-shadow: 0 10px 40px rgba(168, 85, 247, 0.08); 
+            transform: scale(1.01); 
+        }}
         
-        .story-block .french-text {{ font-size: 1.6rem; font-weight: 700; color: #ffffff; line-height: 1.4; }}
-        .story-block .translation-text {{ font-size: 1.1rem; color: #9ca3af; margin-top: 10px; }}
-        .active-block .french-text {{ font-size: 2.1rem; }}
-        .active-block .translation-text {{ font-size: 1.4rem; color: #d1d5db !important; }}
+        .french-text {{ font-size: 1.8rem; font-weight: 700; color: #111827; line-height: 1.4; transition: all 0.3s; }}
+        .translation-text {{ font-size: 1rem; color: #6B7280; margin-top: 15px; font-weight: 500; transition: all 0.3s; }}
+        
+        .active-block .french-text {{ font-size: 2.2rem; letter-spacing: -0.5px; color: #000000; }}
+        .active-block .translation-text {{ font-size: 1.25rem; color: #4B5563 !important; }}
 
-        .hover-control-bar {{ position: absolute !important; bottom: 0 !important; left: 0 !important; right: 0 !important; height: 115px !important; background-color: rgba(17, 24, 39, 0.95) !important; backdrop-filter: blur(10px); border-top: 1px solid #1f2937; display: flex !important; flex-direction: column !important; justify-content: center !important; padding: 0 20px !important; z-index: 999999 !important; }}
-        .progress-bar-container {{ width: 100%; margin-bottom: 10px; display: flex; align-items: center; }}
-        #timeline-slider {{ width: 100%; -webkit-appearance: none; background: #374151; height: 6px; border-radius: 3px; outline: none; cursor: pointer; }}
-        #timeline-slider::-webkit-slider-thumb {{ -webkit-appearance: none; appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #3b82f6; }}
+        /* Icoontje voor actieve regel */
+        .icon-lu {{
+            display: none; background: #FCD34D; color: #92400E; 
+            font-size: 1rem; font-weight: bold; padding: 4px 8px; 
+            border-radius: 8px; margin-right: 15px; vertical-align: middle;
+        }}
+        .active-block .icon-lu {{ display: inline-block; }}
 
-        .controls-row {{ display: flex; justify-content: space-between; align-items: center; width: 100%; }}
-        .time-info {{ display: flex; gap: 15px; min-width: 140px; }}
-        .time-block {{ display: flex; flex-direction: column; }}
-        .time-label {{ font-size: 0.55rem; font-weight: bold; color: #6b7280; }}
-        .time-value {{ font-size: 1.1rem; font-weight: bold; color: #f3f4f6; }}
+        /* Mobile adjustments */
+        @media (max-width: 768px) {{
+            .top-bar {{
+                padding: 12px 16px 0 16px;
+            }}
+            .top-header {{
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }}
+            .back-arrow {{ font-size: 1.2rem; }}
+            .video-title {{ font-size: 1.25rem; }}
+            .lang-info {{ font-size: 0.85rem; }}
+            .control-row {{
+                flex-direction: column;
+                align-items: stretch;
+                gap: 10px;
+            }}
+            .url-bar-fake {{
+                max-width: 100%;
+                font-size: 0.8rem;
+                padding: 8px 12px;
+            }}
+            .buttons-group {{
+                flex-wrap: wrap;
+                gap: 6px;
+            }}
+            .btn-play, .btn-secondary, .btn-active {{
+                padding: 8px 12px;
+                font-size: 0.8rem;
+            }}
+            .sentence-counter {{ font-size: 0.85rem; }}
+            .overlay-chapters-menu {{
+                width: 100%;
+                max-height: 220px;
+            }}
+            .story-scroll-zone {{
+                padding: 18vh 6% 40vh 6%;
+            }}
+            .story-block {{
+                padding: 24px;
+            }}
+            .french-text {{ font-size: 1.2rem; }}
+            .translation-text {{ font-size: 0.95rem; }}
+            .active-block .french-text {{ font-size: 1.5rem; }}
+            .active-block .translation-text {{ font-size: 1.05rem; }}
+        }}
 
-        .core-controls {{ display: flex; align-items: center; gap: 20px; }}
-        .main-play-btn {{ background: #3b82f6; border: none; color: white; border-radius: 50%; width: 50px; height: 50px; font-size: 1.1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3); }}
-        .skip-btn {{ background: none; border: none; font-size: 1.3rem; color: #9ca3af; cursor: pointer; }}
-        .extra-controls {{ display: flex; align-items: center; gap: 15px; min-width: 140px; justify-content: flex-end; }}
-        .speed-pill {{ background: #1f2937; padding: 6px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; color: #d1d5db; cursor: pointer; border: 1px solid #374151; }}
-        .mic-btn {{ background: #064e3b; color: #34d399; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; }}
     </style>
 
     <script>
         const storyData = {json_data};
         const videoId = '{video_id}';
+        const totalSentences = storyData.length;
         
         const container = document.getElementById('story-container');
-        const sidebarContainer = document.getElementById('chapters-list-container');
         const slider = document.getElementById('timeline-slider');
+        const currentChapterLabel = document.getElementById('current-chapter-label');
+        const overlayCurrentChapter = document.getElementById('overlay-current-chapter');
+        const overlayProgressText = document.getElementById('overlay-progress-text');
+        const overlayChapters = document.getElementById('overlay-chapters');
         
         let currentTargetLangCode = 'nl';
         const translationCache = {{}}; 
@@ -409,12 +635,8 @@ elif st.session_state['fase'] == 'theater':
         let isDraggingSlider = false;
         let scrollAnimationId = null;
 
-        const storageKeyChapters = `completed_chapters_${{videoId}}`;
         const storageKeyTime = `last_time_${{videoId}}`;
         const storageKeyLang = `target_lang_${{videoId}}`;
-        
-        let completedChapters = JSON.parse(localStorage.getItem(storageKeyChapters)) || [];
-        const chaptersList = storyData.filter(line => line.is_chapter);
 
         const savedLang = localStorage.getItem(storageKeyLang);
         if(savedLang) {{
@@ -425,44 +647,18 @@ elif st.session_state['fase'] == 'theater':
             window.parent.location.reload();
         }}
 
-        storyData.forEach(line => {{
+        // Render de witte kaarten
+        storyData.forEach((line, index) => {{
             const div = document.createElement('div');
             div.id = `block-${{line.id}}`;
             div.className = 'story-block';
-            if (line.is_chapter) div.classList.add('chapter-marker-block');
             div.onclick = () => jumpToTime(line.start);
             div.innerHTML = `
-                <div class="french-text">${{line.text_orig}}</div>
+                <div class="french-text"><span class="icon-lu">lu</span>${{line.text_orig}}</div>
                 <div id="trans-${{line.id}}" class="translation-text">...</div>
             `;
             container.appendChild(div);
         }});
-
-        function renderSidebarChapters() {{
-            sidebarContainer.innerHTML = '';
-            chaptersList.forEach((chap) => {{
-                const isDone = completedChapters.includes(chap.id);
-                const item = document.createElement('div');
-                item.id = `sidebar-chap-${{chap.id}}`;
-                item.className = 'chapter-sidebar-item';
-                item.onclick = () => {{
-                    jumpToTime(chap.start);
-                    closeChaptersOverlay();
-                }};
-                item.innerHTML = `
-                    <div class="chapter-title-text" title="${{chap.text_orig}}">${{chap.text_orig}}</div>
-                    <div id="badge-${{chap.id}}" class="status-badge ${{isDone ? 'completed' : ''}}">
-                        ${{isDone ? '&#x2714;' : '&#x25cb;'}}
-                    </div>
-                `;
-                sidebarContainer.appendChild(item);
-            }});
-        }}
-
-        function toggleChaptersOverlay(e) {{ e.stopPropagation(); closeAllMenus(); document.getElementById('chapters-overlay').classList.toggle('open'); }}
-        function closeChaptersOverlay() {{ document.getElementById('chapters-overlay').classList.remove('open'); }}
-
-        renderSidebarChapters();
 
         // --- APART SCROLL MECHANISME MET CUBIC EASE-OUT VERTRAGING ---
         function smoothScrollTo(targetY, duration) {{
@@ -494,6 +690,7 @@ elif st.session_state['fase'] == 'theater':
             if (currentActiveId === activeId) return;
             currentActiveId = activeId;
 
+            // Update visuals
             storyData.forEach(line => {{
                 const block = document.getElementById(`block-${{line.id}}`);
                 if (block) {{
@@ -501,37 +698,16 @@ elif st.session_state['fase'] == 'theater':
                     else block.classList.remove('active-block');
                 }}
             }});
-
+            
+            updateCurrentChapterLabel(activeId);
+            updateProgressUI();
             manageRollingTranslations(activeId);
 
             const currentLine = storyData.find(l => l.id === activeId);
-            if (currentLine) {{
-                let activeChap = null;
-                for (let i = 0; i < chaptersList.length; i++) {{
-                    const chap = chaptersList[i];
-                    const nextChap = chaptersList[i + 1];
-                    
-                    if (currentLine.start >= chap.start) {{
-                        activeChap = chap;
-                        if (nextChap && currentLine.start >= nextChap.start) {{
-                            if (!completedChapters.includes(chap.id)) {{
-                                completedChapters.push(chap.id);
-                                localStorage.setItem(storageKeyChapters, JSON.stringify(completedChapters));
-                                renderSidebarChapters();
-                            }}
-                        }}
-                    }}
-                }}
-
-                document.querySelectorAll('.chapter-sidebar-item').forEach(el => el.classList.remove('current-active-chapter'));
-                if (activeChap) {{
-                    const activeSidebarItem = document.getElementById(`sidebar-chap-${{activeChap.id}}`);
-                    if (activeSidebarItem) activeSidebarItem.classList.add('current-active-chapter');
-                }}
-            }}
-
             const currentBlock = document.getElementById(`block-${{activeId}}`);
+            
             if (currentBlock && !isDraggingSlider) {{
+                // Zorgt dat het blok altijd perfect in het midden van de viewport stopt
                 const targetScrollTop = currentBlock.offsetTop - (container.offsetHeight / 2) + (currentBlock.offsetHeight / 2);
                 
                 // Bereken dynamisch de resterende zinsduur voor de scroll-tijd
@@ -547,20 +723,18 @@ elif st.session_state['fase'] == 'theater':
             }}
         }}
 
-        function toggleSettingsMenu(e) {{ e.stopPropagation(); closeAllMenus(); const menu = document.getElementById('settings-menu'); menu.style.display = menu.style.display === 'block' ? 'none' : 'block'; }}
-        function toggleSpeedMenu(e) {{ e.stopPropagation(); closeAllMenus(); const menu = document.getElementById('speed-menu'); menu.style.display = menu.style.display === 'block' ? 'none' : 'block'; }}
-        function closeAllMenus() {{ document.getElementById('settings-menu').style.display = 'none'; document.getElementById('speed-menu').style.display = 'none'; }}
-        window.onclick = function() {{ closeAllMenus(); }}
-
-        function changeSpeed(rate) {{ if (player && typeof player.setPlaybackRate === 'function') {{ player.setPlaybackRate(rate); document.getElementById('speed-trigger').innerHTML = `📝 ${{rate}}x`; }} }}
-
-        function changeLanguage(code, label) {{
-            currentTargetLangCode = code;
-            localStorage.setItem(storageKeyLang, code);
-            document.getElementById('display-target-lang').innerText = label;
-            storyData.forEach(line => {{ const el = document.getElementById(`trans-${{line.id}}`); if (el) el.innerText = "..."; }});
-            for (let key in translationCache) delete translationCache[key];
-            manageRollingTranslations(currentActiveId, true);
+        function changeSpeed(rate) {{ 
+            if (player && typeof player.setPlaybackRate === 'function') {{ 
+                player.setPlaybackRate(rate); 
+                
+                // Update UI Buttons
+                document.querySelectorAll('.buttons-group button').forEach(btn => {{
+                    if(btn.innerText.includes('x')) {{
+                        btn.className = 'btn-secondary';
+                    }}
+                }});
+                event.target.className = 'btn-active';
+            }} 
         }}
 
         async function translateTextGoogle(text, lang) {{
@@ -587,6 +761,45 @@ elif st.session_state['fase'] == 'theater':
             }}
         }}
 
+        function getCurrentChapterText(activeId) {{
+            let chapterText = 'Huidig hoofdstuk';
+            for (let i = activeId; i >= 0; i--) {{
+                if (storyData[i] && storyData[i].is_chapter) {{
+                    chapterText = storyData[i].text_orig;
+                    break;
+                }}
+            }}
+            return chapterText;
+        }}
+
+        function updateCurrentChapterLabel(activeId) {{
+            const chapterText = getCurrentChapterText(activeId);
+            currentChapterLabel.innerText = chapterText;
+            overlayCurrentChapter.innerText = chapterText;
+        }}
+
+        function updateProgressUI() {{
+            if (!player || typeof player.getCurrentTime !== 'function' || typeof player.getDuration !== 'function') return;
+            const currentTime = player.getCurrentTime();
+            const duration = player.getDuration();
+            if (duration > 0) {{
+                const percent = Math.min(100, Math.max(0, (currentTime / duration) * 100));
+                slider.value = percent;
+                overlayProgressText.innerText = `Voortgang: ${{percent.toFixed(0)}}%`;
+            }}
+        }}
+
+        function openSettings() {{
+            document.getElementById('settings-overlay').classList.add('open');
+            document.body.style.overflow = 'hidden';
+            updateProgressUI();
+        }}
+
+        function closeSettings() {{
+            document.getElementById('settings-overlay').classList.remove('open');
+            document.body.style.overflow = ''; 
+        }}
+
         var tag = document.createElement('script'); tag.src = "https://www.youtube.com/iframe_api";
         var firstScriptTag = document.getElementsByTagName('script')[0]; firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
 
@@ -600,10 +813,8 @@ elif st.session_state['fase'] == 'theater':
         }}
 
         function onPlayerReady() {{
-            const labels = {{'nl': 'NEDERLANDS', 'en': 'ENGLISH', 'de': 'DEUTSCH', 'es': 'ESPAÑOL'}};
-            if(labels[currentTargetLangCode]) {{
-                document.getElementById('display-target-lang').innerText = labels[currentTargetLangCode];
-            }}
+            // Initialiseer ook de hoofdstukken zodra de speler klaar is
+            initChapters();
 
             const savedTime = localStorage.getItem(storageKeyTime);
             if (savedTime) {{
@@ -616,7 +827,12 @@ elif st.session_state['fase'] == 'theater':
 
         function togglePlayback() {{
             if (!player || typeof player.getPlayerState !== 'function') return;
-            if (player.getPlayerState() == YT.PlayerState.PLAYING) player.pauseVideo(); else player.playVideo();
+            const btn = document.getElementById('play-trigger-btn');
+            if (player.getPlayerState() == YT.PlayerState.PLAYING) {{
+                player.pauseVideo();
+            }} else {{
+                player.playVideo();
+            }}
         }}
 
         function skipTime(seconds) {{ if (!player || typeof player.getCurrentTime !== 'function') return; jumpToTime(player.getCurrentTime() + seconds); }}
@@ -626,16 +842,10 @@ elif st.session_state['fase'] == 'theater':
             const btn = document.getElementById('play-trigger-btn');
             if (event.data == YT.PlayerState.PLAYING) {{
                 timeChecker = setInterval(checkLiveSync, 50); 
-                btn.innerHTML = "&#x23f8;"; 
+                btn.innerHTML = "Pause"; 
             }} else {{
-                clearInterval(timeChecker); btn.innerHTML = "&#x25b6;"; 
+                clearInterval(timeChecker); btn.innerHTML = "Play"; 
             }}
-        }}
-
-        function formatTime(seconds) {{
-            if (isNaN(seconds)) return "00:00";
-            const mins = Math.floor(seconds / 60); const secs = Math.floor(seconds % 60);
-            return `${{mins.toString().padStart(2, '0')}}:${{secs.toString().padStart(2, '0')}}`;
         }}
 
         function checkLiveSync() {{
@@ -646,42 +856,44 @@ elif st.session_state['fase'] == 'theater':
             
             localStorage.setItem(storageKeyTime, huidig);
             
-            document.getElementById('time-elapsed').innerText = formatTime(huidig);
-            document.getElementById('time-total').innerText = formatTime(duur);
-            
             if (duur > 0) {{
                 slider.value = (huidig / duur) * 100;
             }}
             
-            let activeId = 0;
+            if (currentActiveId !== null) {{
+                const currentBlock = storyData[currentActiveId];
+                if (currentBlock && huidig >= currentBlock.start && huidig <= currentBlock.end) {{
+                    return; 
+                }}
+            }}
+
+            let matchedId = currentActiveId || 0;
             for (let i = 0; i < storyData.length; i++) {{
                 if (huidig >= storyData[i].start && huidig <= storyData[i].end) {{
-                    activeId = storyData[i].id;
+                    matchedId = storyData[i].id;
                     break;
                 }}
                 if (i < storyData.length - 1 && huidig >= storyData[i].end && huidig < storyData[i+1].start) {{
-                    activeId = storyData[i].id;
+                    matchedId = storyData[i].id;
                     break;
                 }}
             }}
-            syncActiveBlock(activeId);
+            
+            syncActiveBlock(matchedId);
         }}
 
         function jumpToTime(seconds) {{
             if (!player || typeof player.seekTo !== 'function') return;
             player.seekTo(seconds, true);
             localStorage.setItem(storageKeyTime, seconds);
-            setTimeout(checkLiveSync, 50);
+            setTimeout(() => {{
+                isDraggingSlider = false;
+                checkLiveSync();
+            }}, 50);
         }}
 
         function onSliderDrag(val) {{
             isDraggingSlider = true;
-            if (!player) return;
-            const duur = player.getDuration();
-            if (duur > 0) {{
-                const targetSecs = (val / 100) * duur;
-                document.getElementById('time-elapsed').innerText = formatTime(targetSecs);
-            }}
         }}
 
         function onSliderRelease(val) {{
@@ -693,6 +905,49 @@ elif st.session_state['fase'] == 'theater':
             }}
             isDraggingSlider = false;
         }}
+
+        // --- HOOFDSTUK LOGICA ---
+        function initChapters() {{
+            const listContainer = document.getElementById('chapters-list');
+            // Filter alle regels die als hoofdstuk gemarkeerd zijn
+            const chapters = storyData.filter(line => line.is_chapter);
+            
+            if (chapters.length === 0) {{
+                listContainer.innerHTML = '<div class="chapter-item" style="color: #9CA3AF; cursor: default; font-weight: normal;">Geen hoofdstukken herkend</div>';
+                return;
+            }}
+            
+            chapters.forEach(ch => {{
+                const item = document.createElement('div');
+                item.className = 'chapter-item';
+                item.innerText = ch.text_orig;
+                item.onclick = () => {{
+                    jumpToTime(ch.start);
+                    toggleChapters(); // Sluit menu na klik
+                }};
+                listContainer.appendChild(item);
+            }});
+        }}
+
+        function toggleChapters() {{
+            if (!overlayChapters) return;
+            if (overlayChapters.classList.contains('open')) {{
+                overlayChapters.classList.remove('open');
+            }} else {{
+                overlayChapters.classList.add('open');
+            }}
+        }}
+
+        // Sluit het hoofdstukkenmenu als men buiten het menu klikt
+        window.addEventListener('click', function(e) {{
+            if (!overlayChapters) return;
+            const btnClicked = e.target.closest('button');
+            const isToggleButton = btnClicked && btnClicked.innerText.includes('Hoofdstukken');
+            if (overlayChapters.classList.contains('open') && !overlayChapters.contains(e.target) && !isToggleButton) {{
+                overlayChapters.classList.remove('open');
+            }}
+        }});
     </script>
     """
+    
     st.components.v1.html(custom_interface, height=700, scrolling=False)
