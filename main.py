@@ -30,7 +30,7 @@ BOEKEN_DATABASE = [
         "youtube_url": "https://www.youtube.com/watch?v=dIKudSy7d-U",
         "srt_bestand": "youtube_video_transcript.srt",
         "cover_emoji": "🔍",
-        "tijd_offset": -1.8  
+        "tijd_offset": 0.0
     },
 ]
 
@@ -265,7 +265,7 @@ if st.session_state['fase'] == 'setup':
     <script>
         setTimeout(() => {
             const divs = window.parent.document.querySelectorAll('[id^="dashboard-progress-"]');
-            div.forEach(div => {
+            divs.forEach(div => {
                 const vId = div.id.replace('dashboard-progress-', '');
                 const savedTime = window.parent.localStorage.getItem(`last_time_${vId}`);
                 if(savedTime) {
@@ -348,10 +348,10 @@ elif st.session_state['fase'] == 'theater':
                         <button id="play-trigger-btn" class="btn-play" onclick="togglePlayback()">Play</button>
                         <button class="btn-secondary" onclick="skipTime(-10)">-10s</button>
                         <button class="btn-secondary" onclick="skipTime(10)">+10s</button>
-                        <button class="btn-secondary" onclick="changeSpeed(0.75)">0.75x</button>
-                        <button id="speed-indicator" class="btn-active" onclick="changeSpeed(1.0)">1x</button>
-                        <button class="btn-secondary" onclick="changeSpeed(1.25)">1.25x</button>
-                        <button class="btn-secondary" onclick="changeSpeed(1.5)">1.5x</button>
+                        <button class="btn-secondary" onclick="changeSpeed(0.75, event)">0.75x</button>
+                        <button id="speed-indicator" class="btn-active" onclick="changeSpeed(1.0, event)">1x</button>
+                        <button class="btn-secondary" onclick="changeSpeed(1.25, event)">1.25x</button>
+                        <button class="btn-secondary" onclick="changeSpeed(1.5, event)">1.5x</button>
                         <button class="btn-secondary" style="background: #EDE9FE; color: #5B21B6; border: 1px solid #DDD6FE;" onclick="toggleChapters()">Hoofdstukken 📖</button>
                     </div>
                     <div id="overlay-chapters" class="overlay-chapters-menu">
@@ -632,8 +632,10 @@ elif st.session_state['fase'] == 'theater':
         let currentTargetLangCode = 'nl';
         const translationCache = {{}}; 
         let currentActiveId = null;
+        let currentActiveBlockEl = null;
         let isDraggingSlider = false;
         let scrollAnimationId = null;
+        const blockElements = new Map();
 
         const storageKeyTime = `last_time_${{videoId}}`;
         const storageKeyLang = `target_lang_${{videoId}}`;
@@ -658,6 +660,7 @@ elif st.session_state['fase'] == 'theater':
                 <div id="trans-${{line.id}}" class="translation-text">...</div>
             `;
             container.appendChild(div);
+            blockElements.set(line.id, div);
         }});
 
         // --- APART SCROLL MECHANISME MET CUBIC EASE-OUT VERTRAGING ---
@@ -688,52 +691,48 @@ elif st.session_state['fase'] == 'theater':
 
         function syncActiveBlock(activeId) {{
             if (currentActiveId === activeId) return;
+            const prevActiveId = currentActiveId;
             currentActiveId = activeId;
 
-            // Update visuals
-            storyData.forEach(line => {{
-                const block = document.getElementById(`block-${{line.id}}`);
-                if (block) {{
-                    if (line.id === activeId) block.classList.add('active-block');
-                    else block.classList.remove('active-block');
-                }}
-            }});
+            if (prevActiveId !== null && prevActiveId !== undefined) {{
+                const prevBlock = blockElements.get(prevActiveId);
+                if (prevBlock) prevBlock.classList.remove('active-block');
+            }}
+            currentActiveBlockEl = blockElements.get(activeId);
+            if (currentActiveBlockEl) currentActiveBlockEl.classList.add('active-block');
             
             updateCurrentChapterLabel(activeId);
             updateProgressUI();
             manageRollingTranslations(activeId);
 
             const currentLine = storyData.find(l => l.id === activeId);
-            const currentBlock = document.getElementById(`block-${{activeId}}`);
             
-            if (currentBlock && !isDraggingSlider) {{
-                // Zorgt dat het blok altijd perfect in het midden van de viewport stopt
-                const targetScrollTop = currentBlock.offsetTop - (container.offsetHeight / 2) + (currentBlock.offsetHeight / 2);
-                
-                // Bereken dynamisch de resterende zinsduur voor de scroll-tijd
-                let duration = 800; 
+            if (currentActiveBlockEl && !isDraggingSlider) {{
+                const targetScrollTop = currentActiveBlockEl.offsetTop - (container.offsetHeight / 2) + (currentActiveBlockEl.offsetHeight / 2);
+                let duration = 800;
                 if (currentLine && typeof player !== 'undefined' && typeof player.getCurrentTime === 'function') {{
                     const resterendeTijd = currentLine.end - player.getCurrentTime();
                     if (resterendeTijd > 0) {{
-                        duration = Math.min(resterendeTijd * 1000, 2500); 
+                        duration = Math.min(resterendeTijd * 1000, 2500);
                     }}
                 }}
-                
                 smoothScrollTo(targetScrollTop, duration);
             }}
         }}
 
-        function changeSpeed(rate) {{ 
+        function changeSpeed(rate, event) {{ 
             if (player && typeof player.setPlaybackRate === 'function') {{ 
                 player.setPlaybackRate(rate); 
                 
                 // Update UI Buttons
                 document.querySelectorAll('.buttons-group button').forEach(btn => {{
-                    if(btn.innerText.includes('x')) {{
+                    if (btn.innerText.includes('x')) {{
                         btn.className = 'btn-secondary';
                     }}
                 }});
-                event.target.className = 'btn-active';
+                if (event && event.currentTarget) {{
+                    event.currentTarget.className = 'btn-active';
+                }}
             }} 
         }}
 
@@ -749,14 +748,25 @@ elif st.session_state['fase'] == 'theater':
         }}
 
         async function manageRollingTranslations(activeId, force = false) {{
-            let start = Math.max(0, activeId - 2); let end = Math.min(storyData.length - 1, activeId + 3);
+            let start = Math.max(0, activeId - 1);
+            let end = Math.min(storyData.length - 1, activeId + 1);
             for (let i = start; i <= end; i++) {{
                 const cacheKey = `${{i}}_${{currentTargetLangCode}}`;
                 if (!(cacheKey in translationCache) || force) {{
                     translationCache[cacheKey] = "processing";
+                    const el = document.getElementById(`trans-${{i}}`);
+                    if (el) el.innerText = "Vertaling laden...";
                     translateTextGoogle(storyData[i].text_orig, currentTargetLangCode).then(txt => {{
-                        translationCache[cacheKey] = txt; const el = document.getElementById(`trans-${{i}}`); if (el) el.innerText = txt;
+                        translationCache[cacheKey] = txt;
+                        const translatedEl = document.getElementById(`trans-${{i}}`);
+                        if (translatedEl) translatedEl.innerText = txt;
                     }});
+                }} else {{
+                    const cached = translationCache[cacheKey];
+                    if (cached && cached !== "processing") {{
+                        const el = document.getElementById(`trans-${{i}}`);
+                        if (el) el.innerText = cached;
+                    }}
                 }}
             }}
         }}
@@ -820,9 +830,29 @@ elif st.session_state['fase'] == 'theater':
             if (savedTime) {{
                 const targetSec = parseFloat(savedTime);
                 jumpToTime(targetSec);
+                syncActiveBlock(findActiveLineId(targetSec));
             }} else {{
                 syncActiveBlock(0);
             }}
+        }}
+
+        function findActiveLineId(currentTime) {{
+            const withinLines = storyData.filter(line => currentTime >= line.start && currentTime <= line.end);
+            if (withinLines.length > 0) {{
+                return withinLines.reduce((best, line) => (line.start > best.start ? line : best), withinLines[0]).id;
+            }}
+            if (currentTime < storyData[0].start) {{
+                return storyData[0].id;
+            }}
+            let bestLine = storyData[0];
+            for (let i = 0; i < storyData.length; i++) {{
+                if (storyData[i].start <= currentTime) {{
+                    bestLine = storyData[i];
+                }} else {{
+                    break;
+                }}
+            }}
+            return bestLine.id;
         }}
 
         function togglePlayback() {{
@@ -841,10 +871,11 @@ elif st.session_state['fase'] == 'theater':
         function onPlayerStateChange(event) {{
             const btn = document.getElementById('play-trigger-btn');
             if (event.data == YT.PlayerState.PLAYING) {{
-                timeChecker = setInterval(checkLiveSync, 50); 
-                btn.innerHTML = "Pause"; 
+                timeChecker = setInterval(checkLiveSync, 200);
+                btn.innerHTML = "Pause";
             }} else {{
-                clearInterval(timeChecker); btn.innerHTML = "Play"; 
+                clearInterval(timeChecker);
+                btn.innerHTML = "Play";
             }}
         }}
 
@@ -859,26 +890,8 @@ elif st.session_state['fase'] == 'theater':
             if (duur > 0) {{
                 slider.value = (huidig / duur) * 100;
             }}
-            
-            if (currentActiveId !== null) {{
-                const currentBlock = storyData[currentActiveId];
-                if (currentBlock && huidig >= currentBlock.start && huidig <= currentBlock.end) {{
-                    return; 
-                }}
-            }}
 
-            let matchedId = currentActiveId || 0;
-            for (let i = 0; i < storyData.length; i++) {{
-                if (huidig >= storyData[i].start && huidig <= storyData[i].end) {{
-                    matchedId = storyData[i].id;
-                    break;
-                }}
-                if (i < storyData.length - 1 && huidig >= storyData[i].end && huidig < storyData[i+1].start) {{
-                    matchedId = storyData[i].id;
-                    break;
-                }}
-            }}
-            
+            const matchedId = findActiveLineId(huidig);
             syncActiveBlock(matchedId);
         }}
 
