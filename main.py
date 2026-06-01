@@ -12,15 +12,38 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# VASTE BESTANDSNAAM INSTELLEN
-VAST_SRT_BESTAND = "transscriptie_film.srt" 
+# --- DEFINIEER DE BOEKENBIBLIOTHEEK ---
+# TIP: Pas de "tijd_offset" aan als de tekst te vroeg of te laat komt!
+BOEKEN_DATABASE = [
+    {
+        "id": "boek_1",
+        "titel": "La Faiseuse d'étoiles",
+        "auteur": "Mélissa Da Costa",
+        "youtube_url": "https://www.youtube.com/watch?v=B4s9iJBUqSE",
+        "srt_bestand": "transscriptie_film.srt",
+        "cover_emoji": "🚀",
+        "tijd_offset": 0.0  # Loopt al perfect
+    },
+    {
+        "id": "boek_2",
+        "titel": "Un secret",
+        "auteur": "Philippe GRIMBERT",
+        "youtube_url": "https://www.youtube.com/watch?v=dIKudSy7d-U",
+        "srt_bestand": "youtube_video_transcript.srt",
+        "cover_emoji": "🔍",
+        "tijd_offset": -1.5  # Schuift de SRT-tijd 1.8 seconden naar voren
+    },
+]
 
+# --- INITIALISEER SESSION STATE ---
 if 'fase' not in st.session_state:
     st.session_state['fase'] = 'setup'
 if 'raw_srt_data' not in st.session_state:
     st.session_state['raw_srt_data'] = None
 if 'active_video_id' not in st.session_state:
     st.session_state['active_video_id'] = ""
+if 'active_book_title' not in st.session_state:
+    st.session_state['active_book_title'] = ""
 
 def get_youtube_id(url):
     match = re.search(r'(?:v=|\/)([0-9A-Za-z_-]{11}).*', url)
@@ -31,7 +54,7 @@ def srt_tijd_naar_seconden(tijd_str):
     delen = tijd_str.split(':')
     return (int(delen[0]) * 3600) + (int(delen[1]) * 60) + float(delen[2])
 
-def parse_srt_raw(srt_tekst):
+def parse_srt_raw(srt_tekst, offset=0.0):
     blokken = re.split(r'\n\s*\n', srt_tekst.strip())
     data = []
     idx = 0
@@ -44,55 +67,102 @@ def parse_srt_raw(srt_tekst):
                 tijd_delen = tijd_regel.split('-->')
                 tekst = " ".join(regels[tekst_start_index:])
                 
-                # STRIKTE CHECK: Moet verplicht starten met "chapitre"
-                is_chapter = tekst.lower().strip().startswith("chapitre")
+                is_chapter = tekst.lower().strip().startswith("chapitre") or tekst.lower().strip().startswith("chapter")
+                
+                # Bereken de gecorrigeerde tijden met de offset, maar zorg dat het niet onder de 0 zakt
+                start_tijd = max(0.0, srt_tijd_naar_seconden(tijd_delen[0]) + offset)
+                end_tijd = max(0.0, srt_tijd_naar_seconden(tijd_delen[1]) + offset)
                 
                 data.append({
                     "id": idx,
-                    "start": srt_tijd_naar_seconden(tijd_delen[0]),
-                    "end": srt_tijd_naar_seconden(tijd_delen[1]),
+                    "start": start_tijd,
+                    "end": end_tijd,
                     "text_orig": tekst,
                     "is_chapter": is_chapter
                 })
                 idx += 1
     return data
 
-# --- FASE 1: SETUP ---
+# --- FASE 1: SETUP (DASHBOARD / BIBLIOTHEEK) ---
 if st.session_state['fase'] == 'setup':
-    st.title("📚 AI Audioboek Bioscoop")
+    st.markdown("""
+        <style>
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+            html, body, [data-testid="stAppViewContainer"] {
+                background-color: #0b0f19 !important;
+                font-family: 'Inter', sans-serif;
+            }
+            .main-title { text-align: center; color: #ffffff; font-weight: 700; font-size: 2.5rem; margin-bottom: 5px; }
+            .sub-title { text-align: center; color: #9ca3af; font-size: 1.1rem; margin-bottom: 40px; }
+            .progress-indicator { font-size: 0.8rem; color: #60a5fa; font-weight: bold; margin-top: 5px; }
+        </style>
+    """, unsafe_allow_html=True)
     
-    if os.path.exists(VAST_SRT_BESTAND):
-        st.success(f"🔗 Vaste transcriptie gekoppeld: `{VAST_SRT_BESTAND}`")
-    else:
-        st.error(f"❌ Bestand `{VAST_SRT_BESTAND}` niet gevonden!")
-
-    youtube_url = st.text_input("1. Plak de YouTube URL:", "https://www.youtube.com/watch?v=B4s9iJBUqSE&t=91s")
+    st.markdown("<h1 class='main-title'>📚 Mijn Audioboek Bioscoop</h1>", unsafe_allow_html=True)
+    st.markdown("<p class='sub-title'>Kies een boek uit je lokale bibliotheek om verder te lezen</p>", unsafe_allow_html=True)
     
-    if st.button("🎬 Genereer Film & Start Prompter"):
-        video_id = get_youtube_id(youtube_url)
-        
-        if video_id:
-            if os.path.exists(VAST_SRT_BESTAND):
-                with open(VAST_SRT_BESTAND, "r", encoding="utf-8") as f:
-                    srt_inhoud = f.read()
-                
-                st.session_state['raw_srt_data'] = parse_srt_raw(srt_inhoud)
-                st.session_state['active_video_id'] = video_id
-                st.session_state['fase'] = 'loading'
-                st.rerun()
-            else:
-                st.error("Kan niet starten: het vaste .srt-bestand ontbreekt.")
+    cols = st.columns(2)
+    
+    for i, boek in enumerate(BOEKEN_DATABASE):
+        with cols[i % 2]:
+            st.markdown(f"""
+            <div style='background: #111827; border: 1px solid #1f2937; border-radius: 16px; padding: 25px; margin-bottom: 20px; display: flex; gap: 20px; align-items: center;'>
+                <div style='font-size: 3.5rem; background: #1f2937; width: 80px; height: 110px; display: flex; align-items: center; justify-content: center; border-radius: 8px;'>{boek['cover_emoji']}</div>
+                <div style='flex: 1;'>
+                    <h3 style='margin: 0; color: #ffffff; font-size: 1.3rem; font-weight:700;'>{boek['titel']}</h3>
+                    <p style='margin: 3px 0 10px 0; color: #9ca3af; font-size: 0.9rem;'>{boek['auteur']}</p>
+                    <span style='background: rgba(59, 130, 246, 0.1); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.2); padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600;'>
+                        📄 {boek['srt_bestand']}
+                    </span>
+                    <div id="dashboard-progress-{get_youtube_id(boek['youtube_url'])}" class="progress-indicator">⏱️ Voortgang laden...</div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            if st.button(f"📖 Open {boek['titel']}", key=f"btn_{boek['id']}", use_container_width=True):
+                video_id = get_youtube_id(boek['youtube_url'])
+                if video_id:
+                    if os.path.exists(boek['srt_bestand']):
+                        with open(boek['srt_bestand'], "r", encoding="utf-8") as f:
+                            srt_inhoud = f.read()
+                        
+                        st.session_state['raw_srt_data'] = parse_srt_raw(srt_inhoud, offset=boek.get('tijd_offset', 0.0))
+                        st.session_state['active_video_id'] = video_id
+                        st.session_state['active_book_title'] = boek['titel']
+                        st.session_state['fase'] = 'loading'
+                        st.rerun()
+                    else:
+                        st.error(f"Fout: Kan `{boek['srt_bestand']}` niet vinden.")
 
-# --- FASE 2: LOADING ---
+    html_progress_reader = """
+    <script>
+        setTimeout(() => {
+            const divs = window.parent.document.querySelectorAll('[id^="dashboard-progress-"]');
+            divs.forEach(div => {
+                const vId = div.id.replace('dashboard-progress-', '');
+                const savedTime = window.parent.localStorage.getItem(`last_time_${vId}`);
+                if(savedTime) {
+                    const mins = Math.floor(parseFloat(savedTime) / 60);
+                    const secs = Math.floor(parseFloat(savedTime) % 60);
+                    div.innerHTML = `⏱️ Gebleven op: ${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                } else {
+                    div.innerHTML = `⏱️ Nog niet gestart`;
+                }
+            });
+        }, 300);
+    </script>
+    """
+    st.components.v1.html(html_progress_reader, height=0)
+
+# --- FASE 2: LOADING SCREEN ---
 elif st.session_state['fase'] == 'loading':
-    st.markdown("<div style='text-align: center; margin-top: 30vh;'><h3 style='color: #ffffff;'>⏳ Bioscoopomgeving initialiseren...</h3></div>", unsafe_allow_html=True)
-    time.sleep(0.3)
+    st.markdown("<div style='text-align: center; margin-top: 30vh;'><h3 style='color: #ffffff;'>⏳ Theatermodus laden en voortgang ophalen...</h3></div>", unsafe_allow_html=True)
+    time.sleep(0.4)
     st.session_state['fase'] = 'theater'
     st.rerun()
 
-# --- FASE 3: THEATER ---
+# --- FASE 3: THEATER EN AUTOMATISCHE PROMPTER ---
 elif st.session_state['fase'] == 'theater':
-    
     st.markdown("""
         <style>
             html, body, [data-testid="stAppViewContainer"], [data-testid="stApp"], .main, .block-container {
@@ -111,15 +181,16 @@ elif st.session_state['fase'] == 'theater':
 
     json_data = json.dumps(st.session_state['raw_srt_data']).replace("'", "\\'")
     video_id = st.session_state['active_video_id']
+    boek_titel = st.session_state['active_book_title']
 
-    custom_interface = """
+    custom_interface = f"""
     <div class="app-container">
         <div style="width: 1px; height: 1px; opacity: 0; overflow: hidden; position: absolute;">
             <div id="player"></div>
         </div>
 
         <div class="top-bar">
-            <div class="back-arrow" onclick="window.parent.location.reload();">&#x2190; <span class="video-title">Nieuwe Film</span></div>
+            <div class="back-arrow" onclick="gaTerugNaarDashboard();">&#x2190; <span class="video-title">{boek_titel}</span></div>
             
             <div class="middle-controls">
                 <button class="menu-trigger-btn" onclick="toggleChaptersOverlay(event)">🔖 Hoofdstukken</button>
@@ -150,8 +221,7 @@ elif st.session_state['fase'] == 'theater':
                         <span class="sidebar-title">🔖 Hoofdstukken</span>
                         <button class="close-sidebar-btn" onclick="closeChaptersOverlay()">✕ Sluiten</button>
                     </div>
-                    <div id="chapters-list-container" class="chapters-list">
-                        </div>
+                    <div id="chapters-list-container" class="chapters-list"></div>
                 </div>
             </div>
 
@@ -198,10 +268,10 @@ elif st.session_state['fase'] == 'theater':
     </div>
 
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        html, body { background-color: #0b0f19; overflow: hidden !important; height: 100vh !important; width: 100vw !important; }
+        * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+        html, body {{ background-color: #0b0f19; overflow: hidden !important; height: 100vh !important; width: 100vw !important; }}
 
-        .app-container {
+        .app-container {{
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             color: #f3f4f6;
             background-color: #0b0f19;
@@ -211,388 +281,418 @@ elif st.session_state['fase'] == 'theater':
             overflow: hidden !important;
             display: flex;
             flex-direction: column;
-        }
+        }}
 
-        .top-bar {
+        .top-bar {{
             position: absolute; top: 0; left: 0; right: 0; height: 70px;
             display: flex; justify-content: space-between; align-items: center;
             padding: 0 20px; background: #111827; border-bottom: 1px solid #1f2937; z-index: 9999;
-        }
-        .back-arrow { font-weight: 600; cursor: pointer; color: #3b82f6; }
-        .middle-controls { display: flex; align-items: center; gap: 15px; }
+        }}
+        .back-arrow {{ font-weight: 600; cursor: pointer; color: #3b82f6; }}
+        .middle-controls {{ display: flex; align-items: center; gap: 15px; }}
         
-        .menu-trigger-btn {
+        .menu-trigger-btn {{
             background: #1f2937; border: 1px solid #374151; color: #ffffff;
             padding: 8px 16px; border-radius: 20px; font-weight: 600; font-size: 0.85rem;
             cursor: pointer; transition: background 0.2s;
-        }
-        .menu-trigger-btn:hover { background: #374151; }
+        }}
+        .menu-trigger-btn:hover {{ background: #374151; }}
 
-        .language-selector { display: flex; align-items: center; gap: 6px; }
-        .lang-pill { padding: 5px 10px; border-radius: 15px; font-size: 0.68rem; font-weight: 800; }
-        .active-lang { background: #064e3b; color: #34d399; }
-        .target-lang { background: #1e3a8a; color: #60a5fa; }
-        .settings-icon { font-size: 1.3rem; cursor: pointer; color: #9ca3af; }
+        .language-selector {{ display: flex; align-items: center; gap: 6px; }}
+        .lang-pill {{ padding: 5px 10px; border-radius: 15px; font-size: 0.68rem; font-weight: 800; }}
+        .active-lang {{ background: #064e3b; color: #34d399; }}
+        .target-lang {{ background: #1e3a8a; color: #60a5fa; }}
+        .settings-icon {{ font-size: 1.3rem; cursor: pointer; color: #9ca3af; }}
         
-        .settings-wrapper, .speed-wrapper { position: relative; display: inline-block; }
-        .dropdown-menu {
+        .settings-wrapper, .speed-wrapper {{ position: relative; display: inline-block; }}
+        .dropdown-menu {{
             display: none; position: absolute; right: 0; background: #1f2937;
             border: 1px solid #374151; border-radius: 10px; box-shadow: 0 10px 25px rgba(0,0,0,0.5);
             width: 180px; z-index: 10000; margin-top: 10px;
-        }
-        .speed-dropdown { bottom: 100%; margin-bottom: 15px; top: auto; }
-        .dropdown-title { padding: 10px 15px; font-size: 0.75rem; color: #9ca3af; font-weight: bold; border-bottom: 1px solid #374151; }
-        .dropdown-item { padding: 10px 15px; font-size: 0.85rem; color: #e5e7eb; cursor: pointer; }
-        .dropdown-item:hover { background: #374151; color: white; }
+        }}
+        .speed-dropdown {{ bottom: 100%; margin-bottom: 15px; top: auto; }}
+        .dropdown-title {{ padding: 10px 15px; font-size: 0.75rem; color: #9ca3af; font-weight: bold; border-bottom: 1px solid #374151; }}
+        .dropdown-item {{ padding: 10px 15px; font-size: 0.85rem; color: #e5e7eb; cursor: pointer; }}
+        .dropdown-item:hover {{ background: #374151; color: white; }}
 
-        /* VASTE HOOGTE VOOR DE LAYOUT ZONE */
-        .main-layout {
+        .main-layout {{
             position: absolute; top: 70px; bottom: 115px; left: 0; right: 0;
             display: flex; overflow: hidden;
-        }
+        }}
 
-        /* OVERLAY ZIJBALK SYSTEM */
-        .chapters-overlay {
+        .chapters-overlay {{
             position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
             background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(4px);
             z-index: 99999; display: none; opacity: 0; transition: opacity 0.3s ease;
-        }
-        .chapters-overlay.open { display: block; opacity: 1; }
+        }}
+        .chapters-overlay.open {{ display: block; opacity: 1; }}
         
-        .sidebar-content {
+        .sidebar-content {{
             position: absolute; top: 0; left: -340px; width: 340px; height: 100%;
             background: #111827; box-shadow: 10px 0 30px rgba(0,0,0,0.5);
             display: flex; flex-direction: column; padding: 20px 0;
             transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        .chapters-overlay.open .sidebar-content { left: 0; }
+        }}
+        .chapters-overlay.open .sidebar-content {{ left: 0; }}
 
-        @media (max-width: 480px) {
-            .sidebar-content { width: 85%; left: -85%; }
-        }
-
-        .sidebar-header {
+        .sidebar-header {{
             display: flex; justify-content: space-between; align-items: center;
             padding: 0 20px 15px 20px; border-bottom: 1px solid #1f2937;
-        }
-        .sidebar-title { font-size: 1.1rem; font-weight: 700; color: #ffffff; }
-        .close-sidebar-btn {
+        }}
+        .sidebar-title {{ font-size: 1.1rem; font-weight: 700; color: #ffffff; }}
+        .close-sidebar-btn {{
             background: #ef4444; border: none; color: white; padding: 6px 12px;
             border-radius: 8px; font-size: 0.8rem; font-weight: bold; cursor: pointer;
-        }
+        }}
 
-        .chapters-list { flex: 1; overflow-y: auto; padding: 15px; }
-        .chapter-sidebar-item {
+        .chapters-list {{ flex: 1; overflow-y: auto; padding: 15px; }}
+        .chapter-sidebar-item {{
             display: flex; align-items: center; justify-content: space-between;
             padding: 14px; margin-bottom: 8px; border-radius: 10px;
             background: #1f2937; border: 1px solid transparent; cursor: pointer;
-        }
-        .chapter-sidebar-item.current-active-chapter { border-color: #3b82f6; background: rgba(59, 130, 246, 0.15); }
-        .chapter-title-text { font-size: 0.85rem; font-weight: 500; color: #d1d5db; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .chapter-sidebar-item.current-active-chapter .chapter-title-text { color: #60a5fa; font-weight: 700; }
-        .status-badge { font-size: 0.95rem; color: #4b5563; }
-        .status-badge.completed { color: #10b981; }
+        }}
+        .chapter-sidebar-item.current-active-chapter {{ border-color: #3b82f6; background: rgba(59, 130, 246, 0.15); }}
+        .chapter-title-text {{ font-size: 0.85rem; font-weight: 500; color: #d1d5db; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+        .chapter-sidebar-item.current-active-chapter .chapter-title-text {{ color: #60a5fa; font-weight: 700; }}
+        .status-badge {{ font-size: 0.95rem; color: #4b5563; }}
+        .status-badge.completed {{ color: #10b981; }}
 
-        /* PROMPTER SCROLL FLOW (Gecorrigeerd voor absolute hoogtebehoud) */
-        .story-scroll-zone { 
-            position: relative;
-            width: 100%;
-            height: 100%;
-            overflow-y: scroll !important; 
-            padding: 35vh 8% 45vh 8%; 
-            background: #0b0f19; 
-            scroll-behavior: smooth; 
-        }
-        .story-scroll-zone::-webkit-scrollbar { display: none; }
+        .story-scroll-zone {{ 
+            position: relative; width: 100%; height: 100%;
+            overflow-y: scroll !important; padding: 35vh 8% 45vh 8%; 
+            background: #0b0f19;
+        }}
+        .story-scroll-zone::-webkit-scrollbar {{ display: none; }}
 
-        .story-block { width: 100%; text-align: center; padding: 25px 30px; margin: 15px 0; border-radius: 16px; border: 1px solid transparent; cursor: pointer; opacity: 0.25; transition: all 0.4s ease; }
-        .story-block:hover { opacity: 0.6; background: rgba(31, 41, 55, 0.3); border-color: #374151; }
-        .chapter-marker-block { border-left: 4px solid #3b82f6 !important; font-style: italic; }
+        .story-block {{ width: 100%; text-align: center; padding: 25px 30px; margin: 15px 0; border-radius: 16px; border: 1px solid transparent; cursor: pointer; opacity: 0.25; transition: all 0.3s ease-in-out; }}
+        .story-block:hover {{ opacity: 0.6; background: rgba(31, 41, 55, 0.3); border-color: #374151; }}
+        .chapter-marker-block {{ border-left: 4px solid #3b82f6 !important; font-style: italic; }}
 
-        .active-block { opacity: 1 !important; background: #1f2937; border-color: #374151; box-shadow: 0 20px 40px rgba(0,0,0,0.5); transform: scale(1.02); }
-        .active-block::before { content: "• CURRENT VERSE"; display: block; font-size: 0.65rem; font-weight: 800; color: #34d399; margin-bottom: 12px; }
+        .active-block {{ opacity: 1 !important; background: #1f2937; border-color: #374151; box-shadow: 0 20px 40px rgba(0,0,0,0.5); transform: scale(1.01); }}
+        .active-block::before {{ content: "• HUIDIGE ZIN"; display: block; font-size: 0.65rem; font-weight: 800; color: #34d399; margin-bottom: 12px; }}
         
-        .story-block .french-text { font-size: 1.6rem; font-weight: 700; color: #ffffff; line-height: 1.4; }
-        .story-block .translation-text { font-size: 1.1rem; color: #9ca3af; margin-top: 10px; }
-        .active-block .french-text { font-size: 2.1rem; }
-        .active-block .translation-text { font-size: 1.4rem; color: #d1d5db !important; }
+        .story-block .french-text {{ font-size: 1.6rem; font-weight: 700; color: #ffffff; line-height: 1.4; }}
+        .story-block .translation-text {{ font-size: 1.1rem; color: #9ca3af; margin-top: 10px; }}
+        .active-block .french-text {{ font-size: 2.1rem; }}
+        .active-block .translation-text {{ font-size: 1.4rem; color: #d1d5db !important; }}
 
-        /* TIMELINE CONTROLS */
-        .hover-control-bar { position: absolute !important; bottom: 0 !important; left: 0 !important; right: 0 !important; height: 115px !important; background-color: rgba(17, 24, 39, 0.95) !important; backdrop-filter: blur(10px); border-top: 1px solid #1f2937; display: flex !important; flex-direction: column !important; justify-content: center !important; padding: 0 20px !important; z-index: 999999 !important; }
-        .progress-bar-container { width: 100%; margin-bottom: 10px; display: flex; align-items: center; }
-        #timeline-slider { width: 100%; -webkit-appearance: none; background: #374151; height: 6px; border-radius: 3px; outline: none; cursor: pointer; }
-        #timeline-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #3b82f6; }
+        .hover-control-bar {{ position: absolute !important; bottom: 0 !important; left: 0 !important; right: 0 !important; height: 115px !important; background-color: rgba(17, 24, 39, 0.95) !important; backdrop-filter: blur(10px); border-top: 1px solid #1f2937; display: flex !important; flex-direction: column !important; justify-content: center !important; padding: 0 20px !important; z-index: 999999 !important; }}
+        .progress-bar-container {{ width: 100%; margin-bottom: 10px; display: flex; align-items: center; }}
+        #timeline-slider {{ width: 100%; -webkit-appearance: none; background: #374151; height: 6px; border-radius: 3px; outline: none; cursor: pointer; }}
+        #timeline-slider::-webkit-slider-thumb {{ -webkit-appearance: none; appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #3b82f6; }}
 
-        .controls-row { display: flex; justify-content: space-between; align-items: center; width: 100%; }
-        .time-info { display: flex; gap: 15px; min-width: 140px; }
-        .time-block { display: flex; flex-direction: column; }
-        .time-label { font-size: 0.55rem; font-weight: bold; color: #6b7280; }
-        .time-value { font-size: 1.1rem; font-weight: bold; color: #f3f4f6; }
+        .controls-row {{ display: flex; justify-content: space-between; align-items: center; width: 100%; }}
+        .time-info {{ display: flex; gap: 15px; min-width: 140px; }}
+        .time-block {{ display: flex; flex-direction: column; }}
+        .time-label {{ font-size: 0.55rem; font-weight: bold; color: #6b7280; }}
+        .time-value {{ font-size: 1.1rem; font-weight: bold; color: #f3f4f6; }}
 
-        .core-controls { display: flex; align-items: center; gap: 20px; }
-        .main-play-btn { background: #3b82f6; border: none; color: white; border-radius: 50%; width: 50px; height: 50px; font-size: 1.1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3); }
-        .skip-btn { background: none; border: none; font-size: 1.3rem; color: #9ca3af; cursor: pointer; }
-        .extra-controls { display: flex; align-items: center; gap: 15px; min-width: 140px; justify-content: flex-end; }
-        .speed-pill { background: #1f2937; padding: 6px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; color: #d1d5db; cursor: pointer; border: 1px solid #374151; }
-        .mic-btn { background: #064e3b; color: #34d399; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+        .core-controls {{ display: flex; align-items: center; gap: 20px; }}
+        .main-play-btn {{ background: #3b82f6; border: none; color: white; border-radius: 50%; width: 50px; height: 50px; font-size: 1.1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3); }}
+        .skip-btn {{ background: none; border: none; font-size: 1.3rem; color: #9ca3af; cursor: pointer; }}
+        .extra-controls {{ display: flex; align-items: center; gap: 15px; min-width: 140px; justify-content: flex-end; }}
+        .speed-pill {{ background: #1f2937; padding: 6px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; color: #d1d5db; cursor: pointer; border: 1px solid #374151; }}
+        .mic-btn {{ background: #064e3b; color: #34d399; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; }}
     </style>
 
     <script>
-        const storyData = __JSON_DATA__;
-        const videoId = '__VIDEO_ID__';
+        const storyData = {json_data};
+        const videoId = '{video_id}';
         
         const container = document.getElementById('story-container');
         const sidebarContainer = document.getElementById('chapters-list-container');
         const slider = document.getElementById('timeline-slider');
         
         let currentTargetLangCode = 'nl';
-        const translationCache = {}; 
+        const translationCache = {{}}; 
         let currentActiveId = null;
         let isDraggingSlider = false;
+        let scrollAnimationId = null;
 
-        // LOCALSTORAGE KEYS
-        const storageKeyChapters = `completed_chapters_${videoId}`;
-        const storageKeyTime = `last_time_${videoId}`;
+        const storageKeyChapters = `completed_chapters_${{videoId}}`;
+        const storageKeyTime = `last_time_${{videoId}}`;
+        const storageKeyLang = `target_lang_${{videoId}}`;
         
         let completedChapters = JSON.parse(localStorage.getItem(storageKeyChapters)) || [];
         const chaptersList = storyData.filter(line => line.is_chapter);
 
-        // Bouw prompter
-        storyData.forEach(line => {
+        const savedLang = localStorage.getItem(storageKeyLang);
+        if(savedLang) {{
+            currentTargetLangCode = savedLang;
+        }}
+
+        function gaTerugNaarDashboard() {{
+            window.parent.location.reload();
+        }}
+
+        storyData.forEach(line => {{
             const div = document.createElement('div');
-            div.id = `block-${line.id}`;
+            div.id = `block-${{line.id}}`;
             div.className = 'story-block';
             if (line.is_chapter) div.classList.add('chapter-marker-block');
             div.onclick = () => jumpToTime(line.start);
             div.innerHTML = `
-                <div class="french-text">${line.text_orig}</div>
-                <div id="trans-${line.id}" class="translation-text">...</div>
+                <div class="french-text">${{line.text_orig}}</div>
+                <div id="trans-${{line.id}}" class="translation-text">...</div>
             `;
             container.appendChild(div);
-        });
+        }});
 
-        // Zijbalk Rendering
-        function renderSidebarChapters() {
+        function renderSidebarChapters() {{
             sidebarContainer.innerHTML = '';
-            chaptersList.forEach((chap) => {
+            chaptersList.forEach((chap) => {{
                 const isDone = completedChapters.includes(chap.id);
                 const item = document.createElement('div');
-                item.id = `sidebar-chap-${chap.id}`;
+                item.id = `sidebar-chap-${{chap.id}}`;
                 item.className = 'chapter-sidebar-item';
-                item.onclick = () => {
+                item.onclick = () => {{
                     jumpToTime(chap.start);
                     closeChaptersOverlay();
-                };
+                }};
                 item.innerHTML = `
-                    <div class="chapter-title-text" title="${chap.text_orig}">${chap.text_orig}</div>
-                    <div id="badge-${chap.id}" class="status-badge ${isDone ? 'completed' : ''}">
-                        ${isDone ? '&#x2714;' : '&#x25cb;'}
+                    <div class="chapter-title-text" title="${{chap.text_orig}}">${{chap.text_orig}}</div>
+                    <div id="badge-${{chap.id}}" class="status-badge ${{isDone ? 'completed' : ''}}">
+                        ${{isDone ? '&#x2714;' : '&#x25cb;'}}
                     </div>
                 `;
                 sidebarContainer.appendChild(item);
-            });
-        }
+            }});
+        }}
 
-        // OVERLAY FUNCTIONS
-        function toggleChaptersOverlay(e) {
-            e.stopPropagation();
-            closeAllMenus();
-            const overlay = document.getElementById('chapters-overlay');
-            overlay.classList.toggle('open');
-        }
-        function closeChaptersOverlay() {
-            document.getElementById('chapters-overlay').classList.remove('open');
-        }
+        function toggleChaptersOverlay(e) {{ e.stopPropagation(); closeAllMenus(); document.getElementById('chapters-overlay').classList.toggle('open'); }}
+        function closeChaptersOverlay() {{ document.getElementById('chapters-overlay').classList.remove('open'); }}
 
         renderSidebarChapters();
 
-        // EXACTE CENTERING SCROLL MECHANISME HERSTELD
-        function syncActiveBlock(activeId) {
+        // --- APART SCROLL MECHANISME MET CUBIC EASE-OUT VERTRAGING ---
+        function smoothScrollTo(targetY, duration) {{
+            if (scrollAnimationId) cancelAnimationFrame(scrollAnimationId);
+            
+            const startY = container.scrollTop;
+            const distance = targetY - startY;
+            let startTime = null;
+
+            function easeOutCubic(t) {{
+                return 1 - Math.pow(1 - t, 3);
+            }}
+
+            function animation(currentTime) {{
+                if (startTime === null) startTime = currentTime;
+                const timeElapsed = currentTime - startTime;
+                const progress = Math.min(timeElapsed / duration, 1);
+                
+                container.scrollTop = startY + distance * easeOutCubic(progress);
+
+                if (progress < 1) {{
+                    scrollAnimationId = requestAnimationFrame(animation);
+                }}
+            }}
+            scrollAnimationId = requestAnimationFrame(animation);
+        }}
+
+        function syncActiveBlock(activeId) {{
             if (currentActiveId === activeId) return;
             currentActiveId = activeId;
 
-            storyData.forEach(line => {
-                const block = document.getElementById(`block-${line.id}`);
-                if (block) {
+            storyData.forEach(line => {{
+                const block = document.getElementById(`block-${{line.id}}`);
+                if (block) {{
                     if (line.id === activeId) block.classList.add('active-block');
                     else block.classList.remove('active-block');
-                }
-            });
+                }}
+            }});
 
             manageRollingTranslations(activeId);
 
             const currentLine = storyData.find(l => l.id === activeId);
-            if (currentLine) {
+            if (currentLine) {{
                 let activeChap = null;
-                for (let i = 0; i < chaptersList.length; i++) {
+                for (let i = 0; i < chaptersList.length; i++) {{
                     const chap = chaptersList[i];
                     const nextChap = chaptersList[i + 1];
                     
-                    if (currentLine.start >= chap.start) {
+                    if (currentLine.start >= chap.start) {{
                         activeChap = chap;
-                        if (nextChap && currentLine.start >= nextChap.start) {
-                            if (!completedChapters.includes(chap.id)) {
+                        if (nextChap && currentLine.start >= nextChap.start) {{
+                            if (!completedChapters.includes(chap.id)) {{
                                 completedChapters.push(chap.id);
                                 localStorage.setItem(storageKeyChapters, JSON.stringify(completedChapters));
                                 renderSidebarChapters();
-                            }
-                        }
-                    }
-                }
+                            }}
+                        }}
+                    }}
+                }}
 
                 document.querySelectorAll('.chapter-sidebar-item').forEach(el => el.classList.remove('current-active-chapter'));
-                if (activeChap) {
-                    const activeSidebarItem = document.getElementById(`sidebar-chap-${activeChap.id}`);
+                if (activeChap) {{
+                    const activeSidebarItem = document.getElementById(`sidebar-chap-${{activeChap.id}}`);
                     if (activeSidebarItem) activeSidebarItem.classList.add('current-active-chapter');
-                }
-            }
+                }}
+            }}
 
-            // Gecorrigeerde scroll-to-center berekening
-            const currentBlock = document.getElementById(`block-${activeId}`);
-            if (currentBlock) {
+            const currentBlock = document.getElementById(`block-${{activeId}}`);
+            if (currentBlock && !isDraggingSlider) {{
                 const targetScrollTop = currentBlock.offsetTop - (container.offsetHeight / 2) + (currentBlock.offsetHeight / 2);
-                container.scrollTo({
-                    top: targetScrollTop,
-                    behavior: 'smooth'
-                });
-            }
-        }
+                
+                // Bereken dynamisch de resterende zinsduur voor de scroll-tijd
+                let duration = 800; 
+                if (currentLine && typeof player !== 'undefined' && typeof player.getCurrentTime === 'function') {{
+                    const resterendeTijd = currentLine.end - player.getCurrentTime();
+                    if (resterendeTijd > 0) {{
+                        duration = Math.min(resterendeTijd * 1000, 2500); 
+                    }}
+                }}
+                
+                smoothScrollTo(targetScrollTop, duration);
+            }}
+        }}
 
-        function toggleSettingsMenu(e) { e.stopPropagation(); closeAllMenus(); const menu = document.getElementById('settings-menu'); menu.style.display = menu.style.display === 'block' ? 'none' : 'block'; }
-        function toggleSpeedMenu(e) { e.stopPropagation(); closeAllMenus(); const menu = document.getElementById('speed-menu'); menu.style.display = menu.style.display === 'block' ? 'none' : 'block'; }
-        function closeAllMenus() { document.getElementById('settings-menu').style.display = 'none'; document.getElementById('speed-menu').style.display = 'none'; }
-        window.onclick = function() { closeAllMenus(); }
+        function toggleSettingsMenu(e) {{ e.stopPropagation(); closeAllMenus(); const menu = document.getElementById('settings-menu'); menu.style.display = menu.style.display === 'block' ? 'none' : 'block'; }}
+        function toggleSpeedMenu(e) {{ e.stopPropagation(); closeAllMenus(); const menu = document.getElementById('speed-menu'); menu.style.display = menu.style.display === 'block' ? 'none' : 'block'; }}
+        function closeAllMenus() {{ document.getElementById('settings-menu').style.display = 'none'; document.getElementById('speed-menu').style.display = 'none'; }}
+        window.onclick = function() {{ closeAllMenus(); }}
 
-        function changeSpeed(rate) { if (player && typeof player.setPlaybackRate === 'function') { player.setPlaybackRate(rate); document.getElementById('speed-trigger').innerHTML = `📝 ${rate}x`; } }
+        function changeSpeed(rate) {{ if (player && typeof player.setPlaybackRate === 'function') {{ player.setPlaybackRate(rate); document.getElementById('speed-trigger').innerHTML = `📝 ${{rate}}x`; }} }}
 
-        function changeLanguage(code, label) {
+        function changeLanguage(code, label) {{
             currentTargetLangCode = code;
+            localStorage.setItem(storageKeyLang, code);
             document.getElementById('display-target-lang').innerText = label;
-            storyData.forEach(line => { const el = document.getElementById(`trans-${line.id}`); if (el) el.innerText = "..."; });
+            storyData.forEach(line => {{ const el = document.getElementById(`trans-${{line.id}}`); if (el) el.innerText = "..."; }});
             for (let key in translationCache) delete translationCache[key];
             manageRollingTranslations(currentActiveId, true);
-        }
+        }}
 
-        async function translateTextGoogle(text, lang) {
-            try {
-                const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${lang}&dt=t&q=${encodeURIComponent(text)}`;
+        async function translateTextGoogle(text, lang) {{
+            try {{
+                const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${{lang}}&dt=t&q=${{encodeURIComponent(text)}}`;
                 const res = await fetch(url); const json = await res.json();
-                if (json && json[0]) {
-                    let trans = ""; json[0].forEach(p => { if (p[0]) trans += p[0]; }); return trans;
-                }
+                if (json && json[0]) {{
+                    let trans = ""; json[0].forEach(p => {{ if (p[0]) trans += p[0]; }}); return trans;
+                }}
                 return "[Vertaling onbeschikbaar]";
-            } catch (err) { return "[Verbindingsfout]"; }
-        }
+            }} catch (err) {{ return "[Verbindingsfout]"; }}
+        }}
 
-        async function manageRollingTranslations(activeId, force = false) {
+        async function manageRollingTranslations(activeId, force = false) {{
             let start = Math.max(0, activeId - 2); let end = Math.min(storyData.length - 1, activeId + 3);
-            for (let i = start; i <= end; i++) {
-                const cacheKey = `${i}_${currentTargetLangCode}`;
-                if (!(cacheKey in translationCache) || force) {
+            for (let i = start; i <= end; i++) {{
+                const cacheKey = `${{i}}_${{currentTargetLangCode}}`;
+                if (!(cacheKey in translationCache) || force) {{
                     translationCache[cacheKey] = "processing";
-                    translateTextGoogle(storyData[i].text_orig, currentTargetLangCode).then(txt => {
-                        translationCache[cacheKey] = txt; const el = document.getElementById(`trans-${i}`); if (el) el.innerText = txt;
-                    });
-                }
-            }
-        }
+                    translateTextGoogle(storyData[i].text_orig, currentTargetLangCode).then(txt => {{
+                        translationCache[cacheKey] = txt; const el = document.getElementById(`trans-${{i}}`); if (el) el.innerText = txt;
+                    }});
+                }}
+            }}
+        }}
 
-        // YOUTUBE PLAYER CONFIG
         var tag = document.createElement('script'); tag.src = "https://www.youtube.com/iframe_api";
         var firstScriptTag = document.getElementsByTagName('script')[0]; firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
 
         var player;
-        window.onYouTubeIframeAPIReady = function() {
-            player = new YT.Player('player', {
+        window.onYouTubeIframeAPIReady = function() {{
+            player = new YT.Player('player', {{
                 height: '1', width: '1', videoId: videoId,
-                playerVars: { 'autoplay': 0, 'playsinline': 1, 'controls': 0 },
-                events: { 
-                    'onStateChange': onPlayerStateChange,
-                    'onReady': onPlayerReady
-                }
-            });
-        }
+                playerVars: {{ 'autoplay': 0, 'playsinline': 1, 'controls': 0 }},
+                events: {{ 'onStateChange': onPlayerStateChange, 'onReady': onPlayerReady }}
+            }});
+        }}
 
-        function onPlayerReady() {
+        function onPlayerReady() {{
+            const labels = {{'nl': 'NEDERLANDS', 'en': 'ENGLISH', 'de': 'DEUTSCH', 'es': 'ESPAÑOL'}};
+            if(labels[currentTargetLangCode]) {{
+                document.getElementById('display-target-lang').innerText = labels[currentTargetLangCode];
+            }}
+
             const savedTime = localStorage.getItem(storageKeyTime);
-            if (savedTime) {
+            if (savedTime) {{
                 const targetSec = parseFloat(savedTime);
                 jumpToTime(targetSec);
-            } else {
+            }} else {{
                 syncActiveBlock(0);
-            }
-        }
+            }}
+        }}
 
-        function togglePlayback() {
+        function togglePlayback() {{
             if (!player || typeof player.getPlayerState !== 'function') return;
             if (player.getPlayerState() == YT.PlayerState.PLAYING) player.pauseVideo(); else player.playVideo();
-        }
+        }}
 
-        function skipTime(seconds) { if (!player || typeof player.getCurrentTime !== 'function') return; jumpToTime(player.getCurrentTime() + seconds); }
+        function skipTime(seconds) {{ if (!player || typeof player.getCurrentTime !== 'function') return; jumpToTime(player.getCurrentTime() + seconds); }}
 
         var timeChecker;
-        function onPlayerStateChange(event) {
+        function onPlayerStateChange(event) {{
             const btn = document.getElementById('play-trigger-btn');
-            if (event.data == YT.PlayerState.PLAYING) {
-                timeChecker = setInterval(checkLiveSync, 100); btn.innerHTML = "&#x23f8;"; 
-            } else {
+            if (event.data == YT.PlayerState.PLAYING) {{
+                timeChecker = setInterval(checkLiveSync, 50); 
+                btn.innerHTML = "&#x23f8;"; 
+            }} else {{
                 clearInterval(timeChecker); btn.innerHTML = "&#x25b6;"; 
-            }
-        }
+            }}
+        }}
 
-        function formatTime(seconds) {
+        function formatTime(seconds) {{
             if (isNaN(seconds)) return "00:00";
             const mins = Math.floor(seconds / 60); const secs = Math.floor(seconds % 60);
-            return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-        }
+            return `${{mins.toString().padStart(2, '0')}}:${{secs.toString().padStart(2, '0')}}`;
+        }}
 
-        function checkLiveSync() {
+        function checkLiveSync() {{
             if (!player || typeof player.getCurrentTime !== 'function' || isDraggingSlider) return;
             
-            const currentTime = player.getCurrentTime();
-            const duration = player.getDuration();
+            const huidig = player.getCurrentTime();
+            const duur = player.getDuration();
             
-            document.getElementById('time-elapsed').innerText = formatTime(currentTime);
-            document.getElementById('time-total').innerText = formatTime(duration);
+            localStorage.setItem(storageKeyTime, huidig);
             
-            if (currentTime > 0) {
-                localStorage.setItem(storageKeyTime, currentTime);
-            }
+            document.getElementById('time-elapsed').innerText = formatTime(huidig);
+            document.getElementById('time-total').innerText = formatTime(duur);
             
-            if (duration > 0) {
-                slider.value = (currentTime / duration) * 100;
-            }
+            if (duur > 0) {{
+                slider.value = (huidig / duur) * 100;
+            }}
             
-            const activeLine = storyData.find(line => currentTime >= line.start && currentTime <= line.end);
-            if (activeLine) {
-                syncActiveBlock(activeLine.id);
-            }
-        }
+            let activeId = 0;
+            for (let i = 0; i < storyData.length; i++) {{
+                if (huidig >= storyData[i].start && huidig <= storyData[i].end) {{
+                    activeId = storyData[i].id;
+                    break;
+                }}
+                if (i < storyData.length - 1 && huidig >= storyData[i].end && huidig < storyData[i+1].start) {{
+                    activeId = storyData[i].id;
+                    break;
+                }}
+            }}
+            syncActiveBlock(activeId);
+        }}
 
-        function onSliderDrag(value) {
+        function jumpToTime(seconds) {{
+            if (!player || typeof player.seekTo !== 'function') return;
+            player.seekTo(seconds, true);
+            localStorage.setItem(storageKeyTime, seconds);
+            setTimeout(checkLiveSync, 50);
+        }}
+
+        function onSliderDrag(val) {{
             isDraggingSlider = true;
-            if (!player || typeof player.getDuration !== 'function') return;
-            const targetTime = (value / 100) * player.getDuration();
-            document.getElementById('time-elapsed').innerText = formatTime(targetTime);
-        }
+            if (!player) return;
+            const duur = player.getDuration();
+            if (duur > 0) {{
+                const targetSecs = (val / 100) * duur;
+                document.getElementById('time-elapsed').innerText = formatTime(targetSecs);
+            }}
+        }}
 
-        function onSliderRelease(value) {
+        function onSliderRelease(val) {{
+            if (!player) return;
+            const duur = player.getDuration();
+            if (duur > 0) {{
+                const targetSecs = (val / 100) * duur;
+                jumpToTime(targetSecs);
+            }}
             isDraggingSlider = false;
-            if (!player || typeof player.getDuration !== 'function') return;
-            const targetTime = (value / 100) * player.getDuration();
-            jumpToTime(targetTime);
-        }
-
-        function jumpToTime(seconds) {
-            if (player && typeof player.seekTo === 'function') { 
-                player.seekTo(seconds, true);
-                localStorage.setItem(storageKeyTime, seconds);
-                const activeLine = storyData.find(line => seconds >= line.start && seconds <= line.end);
-                if (activeLine) syncActiveBlock(activeLine.id);
-            }
-        }
+        }}
     </script>
     """
-    
-    custom_interface = custom_interface.replace("__JSON_DATA__", json_data).replace("__VIDEO_ID__", video_id)
     st.components.v1.html(custom_interface, height=700, scrolling=False)
